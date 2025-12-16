@@ -304,45 +304,33 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   const gpuScore = getGpuScore(gpu, input.resolution);
   const ram = ramScore(input.ramAmount, input.ramSpeed);
   const storage = storageScore(input.storageType);
-  const resBoost = resolutionBoost(input.resolution);
-  const refBoost = refreshBoost(input.refreshRate);
 
   const perGame = selectedGames.map(game => {
-    let cpuW = game.cpuWeight + (game.targetFPS === 'high' ? refBoost : refBoost * 0.6);
-    let gpuW = game.gpuWeight + resBoost;
-    if (game.type === 'esports' && input.refreshRate >= 144) cpuW += 0.05;
-    if (game.type === 'aaa' && input.resolution !== '1080p') gpuW += 0.05;
+    const quality: QualitySetting = game.type === 'esports' ? 'low' : 'ultra';
+    const curated =
+      lookupCuratedFps(gpu.id, game.id, input.resolution, quality) ??
+      lookupCuratedFps(gpu.id, game.id, input.resolution, 'ultra') ??
+      lookupCuratedFps(gpu.id, game.id, input.resolution, 'low');
 
-    const total = cpuW + gpuW;
-    cpuW /= total;
-    gpuW /= total;
-
-    const reqCpu = game.type === 'esports'
-      ? (input.refreshRate >= 144 ? 78 : 68)
-      : input.refreshRate >= 144
-      ? 72
-      : 66;
-    const reqGpu = requiredGpuScore(input.resolution) + (game.vramHeavy ? 5 : 0);
-
-    const cpuDeficitRaw = clamp(reqCpu - cpu.score, 0, 100);
-    const gpuDeficitRaw = clamp(reqGpu - gpuScore, 0, 100);
-    const weightedCpuDef = cpuDeficitRaw * cpuW;
-    const weightedGpuDef = gpuDeficitRaw * gpuW;
+    const gpuCap =
+      curated !== null ? curated : fallbackGpuFps(relevantGpuScore(gpu, input.resolution), game, input, quality);
+    const cpuCap = estimateCpuCapFps(cpu.score, input, game, quality);
 
     let limitation: 'CPU' | 'GPU' | 'MIXED' = 'MIXED';
-    if (weightedCpuDef > weightedGpuDef * 1.2) limitation = 'CPU';
-    else if (weightedGpuDef > weightedCpuDef * 1.2) limitation = 'GPU';
+    if (cpuCap < gpuCap * 0.92) limitation = 'CPU';
+    else if (gpuCap < cpuCap * 0.92) limitation = 'GPU';
 
-    const confidence = clamp(Math.abs(weightedCpuDef - weightedGpuDef) * 1.8 + 40, 50, 95);
+    const cpuDeficit = cpuCap < gpuCap ? ((gpuCap - cpuCap) / gpuCap) * 100 : 0;
+    const gpuDeficit = gpuCap < cpuCap ? ((cpuCap - gpuCap) / cpuCap) * 100 : 0;
+    const confidence = clamp(55 + Math.min(40, Math.max(cpuDeficit, gpuDeficit)), 55, 95);
 
     return {
       game,
       limitation,
-      cpuW,
-      gpuW,
-      cpuDeficit: weightedCpuDef,
-      gpuDeficit: weightedGpuDef,
-      confidence
+      cpuDeficit,
+      gpuDeficit,
+      confidence,
+      hasBenchmark: curated !== null
     };
   });
 
@@ -360,18 +348,22 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     : clamp(55 + (dominance / perGame.length) * 40, 55, 95);
 
   const reasons: string[] = [];
+  const benchmarked = perGame.filter(g => g.hasBenchmark).length;
   if (verdictType === 'CPU') {
-    reasons.push(`${cpuLimited}/${perGame.length} games show CPU headroom issues`);
+    reasons.push(`${cpuLimited}/${perGame.length} games hit CPU limits first`);
     if (input.refreshRate >= 144) reasons.push(`High refresh (${input.refreshRate}Hz) amplifies CPU demand`);
     if (cpu.score < 70) reasons.push(`CPU score ${cpu.score} below recommended ${Math.round(perGame.length > 0 ? 70 : 0)}`);
   } else if (verdictType === 'GPU') {
-    reasons.push(`${gpuLimited}/${perGame.length} games stress the GPU first`);
+    reasons.push(`${gpuLimited}/${perGame.length} games hit GPU limits first`);
     if (input.resolution !== '1080p') reasons.push(`${input.resolution} shifts load toward GPU`);
     if (gpuScore < requiredGpuScore(input.resolution)) reasons.push(`GPU score ${gpuScore} trails target ${requiredGpuScore(input.resolution)}`);
   } else {
     reasons.push('Workload varies by title; neither component dominates');
     reasons.push('Resolution and refresh tradeoffs balance CPU/GPU demand');
     reasons.push('Fine-tuning settings may yield better returns than hardware');
+  }
+  if (benchmarked > 0 && benchmarked < perGame.length) {
+    reasons.push(`Benchmark coverage: ${benchmarked}/${perGame.length} games (others estimated)`);
   }
 
   const cpuDeficitAvg = perGame.reduce((s, g) => s + g.cpuDeficit, 0) / perGame.length;

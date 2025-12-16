@@ -41,14 +41,14 @@ describe('analyzeSystem', () => {
 
   it('mixed verdict when balanced', () => {
     const res = analyzeSystem({
-      cpuId: cpu('r7-5800x3d'),
-      gpuId: gpu('rtx3080'),
+      cpuId: cpu('i5-12400'),
+      gpuId: gpu('rtx4090'),
       ramAmount: 32,
       ramSpeed: '3600MHz',
       storageType: 'NVMe',
       resolution: '1440p',
-      refreshRate: 144,
-      games: ['bg3', 'warzone', 'fortnite'],
+      refreshRate: 240,
+      games: ['valorant', 'cyberpunk'],
       budgetBucket: '$700-1200'
     });
     expect(res.verdict.type).toBe('MIXED');
