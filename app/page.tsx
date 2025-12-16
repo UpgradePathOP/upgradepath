@@ -13,7 +13,7 @@ import { ValueCard } from '@/components/results/value-card';
 import { UpgradePathCard } from '@/components/results/upgrade-path-card';
 import { WarningsCard } from '@/components/results/warnings-card';
 import { PartsCard } from '@/components/results/parts-card';
-import { Cpu, HardDrive, Monitor, Share2, Copy, TrendingUp, Loader2, Wand2, Clock4 } from 'lucide-react';
+import { Cpu, HardDrive, Monitor, Share2, Copy, TrendingUp, Loader2, Clock4 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 
@@ -164,13 +164,6 @@ ${result.warnings.map(w => `⚠ ${w}`).join('\n')}
     }));
   };
 
-  const quickWhatIf = () => {
-    setForm(prev => ({
-      ...prev,
-      resolution: prev.resolution === '1080p' ? '1440p' : prev.resolution === '1440p' ? '4K' : '1080p'
-    }));
-  };
-
   const resolutionLabel = useMemo(
     () => (form.resolution === '1080p' ? '1080p (focus FPS)' : form.resolution === '1440p' ? '1440p sweet spot' : '4K cinematic'),
     [form.resolution]
@@ -186,13 +179,6 @@ ${result.warnings.map(w => `⚠ ${w}`).join('\n')}
             <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">Detect bottlenecks, rank upgrades, and see why.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={quickWhatIf}
-              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm hover:border-brand-500 dark:hover:border-brand-500"
-            >
-              <Wand2 className="w-4 h-4" />
-              What-if (cycle resolution)
-            </button>
             <Switch checked={dark} onChange={setDark} label="Dark mode" />
           </div>
         </header>
