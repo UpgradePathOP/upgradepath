@@ -88,7 +88,10 @@ export default function Page() {
         games: form.games.join(','),
         budget: form.budgetBucket
       });
-      window.history.replaceState(null, '', `?${params.toString()}`);
+      if (typeof window !== 'undefined') {
+        const safeState = window.history.state ?? {};
+        window.history.replaceState(safeState, '', `?${params.toString()}`);
+      }
     } catch (e) {
       console.error(e);
       const message = e instanceof Error ? e.message : 'Could not analyze. Please check inputs.';
