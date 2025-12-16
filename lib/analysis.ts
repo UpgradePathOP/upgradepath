@@ -140,7 +140,8 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
       .sort((a, b) => (b.score - currentScore) / b.price - (a.score - currentScore) / a.price);
 
     const withinBudget = candidates.filter(c => c.price <= limit);
-    const shortlist = (withinBudget.length > 0 ? withinBudget : candidates).slice(0, 3);
+    if (withinBudget.length === 0) return [];
+    const shortlist = withinBudget.slice(0, 3);
     const baseline = estimateFps(cpu.score, relevantGpuScore(gpu, input.resolution), input, gamesProfiles);
     return shortlist.map(c => ({
       id: c.id,
@@ -168,7 +169,8 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     .sort((a, b) => (relevantGpuScore(b, input.resolution) - currentGpuScore) / b.price - (relevantGpuScore(a, input.resolution) - currentGpuScore) / a.price);
 
   const withinBudget = candidates.filter(g => g.price <= limit);
-  const shortlist = (withinBudget.length > 0 ? withinBudget : candidates).slice(0, 3);
+  if (withinBudget.length === 0) return [];
+  const shortlist = withinBudget.slice(0, 3);
   const baseline = estimateFps(cpu.score, currentGpuScore, input, gamesProfiles);
   return shortlist.map(g => ({
     id: g.id,
