@@ -156,31 +156,39 @@ function suggestStorage(input: AnalysisInput) {
 function suggestMonitor(input: AnalysisInput, gpu: Gpu) {
   const gpuScore = relevantGpuScore(gpu, input.resolution);
   const limit = budgetLimit[input.budgetBucket];
-  const candidates = (monitors as Monitor[]).filter(m => m.price <= limit * 1.1);
+  const catalog = monitors as Monitor[];
 
-  // Determine target tier based on GPU strength
+  // Define target tiers by GPU strength
   const target = (() => {
-    if (gpuScore >= 95) return { resolution: '4K' as const, refresh: 144 };
-    if (gpuScore >= 85) return { resolution: '1440p' as const, refresh: 240 };
-    if (gpuScore >= 70) return { resolution: '1440p' as const, refresh: 144 };
+    if (gpuScore >= 100) return { resolution: '4K' as const, refresh: 240 };
+    if (gpuScore >= 95) return { resolution: '4K' as const, refresh: 165 };
+    if (gpuScore >= 90) return { resolution: '4K' as const, refresh: 144 };
+    if (gpuScore >= 85) return { resolution: '1440p' as const, refresh: 360 };
+    if (gpuScore >= 75) return { resolution: '1440p' as const, refresh: 240 };
+    if (gpuScore >= 65) return { resolution: '1440p' as const, refresh: 165 };
     if (gpuScore >= 55) return { resolution: '1080p' as const, refresh: 240 };
     return { resolution: '1080p' as const, refresh: 144 };
   })();
 
+  // Include premium picks even if over budget for high-end GPUs
+  const premium = gpuScore >= 95;
+  const candidates = catalog.filter(m => premium || m.price <= limit * 1.25);
+
   const scored = candidates
     .map(m => {
-      const resMatch = m.resolution === target.resolution ? 1 : 0.5;
-      const refreshMatch = m.refresh >= target.refresh ? 1 : 0.6;
+      const resMatch = m.resolution === target.resolution ? 1 : 0.4;
+      const refreshRatio = Math.min(m.refresh / target.refresh, 1.2);
+      const refreshMatch = refreshRatio >= 1 ? 1 : refreshRatio * 0.8;
       const score = resMatch * 0.6 + refreshMatch * 0.4;
       return { ...m, score };
     })
-    .sort((a, b) => b.score - a.score || a.price - b.price)
+    .sort((a, b) => b.score - a.score || b.refresh - a.refresh || a.price - b.price)
     .slice(0, 3)
     .map(m => ({
       id: m.id,
       name: m.name,
       price: m.price,
-      reason: `${m.resolution} @ ${m.refresh}Hz pairs well with your GPU`
+      reason: `${m.resolution} @ ${m.refresh}Hz pairs well with your GPU${premium ? ' (premium match)' : ''}`
     }));
 
   return scored;

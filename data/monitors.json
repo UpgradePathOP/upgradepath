@@ -3,7 +3,13 @@
   { "id": "1080-240-fast", "name": "1080p 240Hz Fast IPS (25\")", "resolution": "1080p", "refresh": 240, "price": 230, "notes": "High-refresh esports" },
   { "id": "1080-360-fast", "name": "1080p 360Hz Fast IPS (25\")", "resolution": "1080p", "refresh": 360, "price": 380, "notes": "Pro-level esports" },
   { "id": "1440-144-ips", "name": "1440p 144Hz IPS (27\")", "resolution": "1440p", "refresh": 144, "price": 300, "notes": "Balanced clarity + speed" },
+  { "id": "1440-165-ips", "name": "1440p 165Hz IPS (27\")", "resolution": "1440p", "refresh": 165, "price": 330, "notes": "Sweet spot for mid/high GPUs" },
   { "id": "1440-240-fast", "name": "1440p 240Hz Fast IPS (27\")", "resolution": "1440p", "refresh": 240, "price": 450, "notes": "High-end esports/AAA" },
+  { "id": "1440-360-fast", "name": "1440p 360Hz Fast IPS (27\")", "resolution": "1440p", "refresh": 360, "price": 700, "notes": "Extreme high-refresh 1440p" },
+  { "id": "1440-480-fast", "name": "1440p 480Hz Fast IPS (27\")", "resolution": "1440p", "refresh": 480, "price": 950, "notes": "Top-tier esports 1440p" },
+  { "id": "1440-720-fast", "name": "1440p 720Hz (prototype class)", "resolution": "1440p", "refresh": 720, "price": 1300, "notes": "Ultra-experimental refresh" },
+  { "id": "4k-120-ips", "name": "4K 120Hz IPS (27-32\")", "resolution": "4K", "refresh": 120, "price": 550, "notes": "Great visuals, moderate GPU need" },
   { "id": "4k-144-ips", "name": "4K 144Hz IPS (27-32\")", "resolution": "4K", "refresh": 144, "price": 650, "notes": "Cinematic + smooth" },
-  { "id": "4k-120-ips", "name": "4K 120Hz IPS (27-32\")", "resolution": "4K", "refresh": 120, "price": 550, "notes": "Great visuals, moderate GPU need" }
+  { "id": "4k-165-fast", "name": "4K 165Hz Fast IPS (27-32\")", "resolution": "4K", "refresh": 165, "price": 800, "notes": "High-end 4K gaming" },
+  { "id": "4k-240-fast", "name": "4K 240Hz Fast IPS (27-32\")", "resolution": "4K", "refresh": 240, "price": 1200, "notes": "Top-tier 4K + high refresh" }
 ]
