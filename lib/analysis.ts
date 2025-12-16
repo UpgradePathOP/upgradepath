@@ -95,7 +95,8 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     name: g.name,
     score: relevantGpuScore(g, input.resolution),
     price: g.price,
-    reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`
+    reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`,
+    compatibilityNote: undefined
   }));
 }
 
