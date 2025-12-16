@@ -89,8 +89,14 @@ export default function Page() {
         budget: form.budgetBucket
       });
       if (typeof window !== 'undefined') {
-        const safeState = window.history.state ?? {};
-        window.history.replaceState(safeState, '', `?${params.toString()}`);
+        try {
+          const state = window.history.state;
+          if (state) {
+            window.history.replaceState(state, '', `?${params.toString()}`);
+          }
+        } catch (err) {
+          console.warn('URL sync skipped', err);
+        }
       }
     } catch (e) {
       console.error(e);
