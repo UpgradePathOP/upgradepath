@@ -84,6 +84,18 @@ const fpsGainFromScores = (current: number, next: number, weight = 1) => {
   return clampGain(base);
 };
 
+const percentFromFps = (baseline: { raw: number; effective: number }, upgraded: { raw: number; effective: number }) => {
+  if (baseline.raw <= 0 || upgraded.raw <= 0) return 0;
+  const rawGain = ((upgraded.raw - baseline.raw) / baseline.raw) * 100;
+  const effGain =
+    baseline.effective > 0
+      ? ((upgraded.effective - baseline.effective) / baseline.effective) * 100
+      : rawGain;
+  // Blend raw and capped, then clamp to avoid every card hitting max
+  const blended = rawGain * 0.6 + effGain * 0.4;
+  return Math.max(0, Math.min(80, Math.round(blended)));
+};
+
 const resolutionFpsScale: Record<AnalysisInput['resolution'], number> = {
   '1080p': 1,
   '1440p': 0.72,
@@ -139,9 +151,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
       percentGain: (() => {
         const upgraded = estimateFps(c.score, relevantGpuScore(gpu, input.resolution), input, gamesProfiles);
         if (baseline === 0 || upgraded === 0) return 0;
-        const gain = baseline.raw > 0 ? ((upgraded.raw - baseline.raw) / baseline.raw) * 100 : 0;
-        const cappedGain = baseline.effective > 0 ? ((upgraded.effective - baseline.effective) / baseline.effective) * 100 : gain;
-        return clampGain(Math.max(gain * 0.8, cappedGain));
+        return percentFromFps(baseline, upgraded);
       })(),
       compatibilityNote:
         c.socket !== cpu.socket
@@ -169,9 +179,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     percentGain: (() => {
       const upgraded = estimateFps(cpu.score, relevantGpuScore(g, input.resolution), input, gamesProfiles);
       if (baseline === 0 || upgraded === 0) return 0;
-      const gain = baseline.raw > 0 ? ((upgraded.raw - baseline.raw) / baseline.raw) * 100 : 0;
-      const cappedGain = baseline.effective > 0 ? ((upgraded.effective - baseline.effective) / baseline.effective) * 100 : gain;
-      return clampGain(Math.max(gain * 0.8, cappedGain));
+      return percentFromFps(baseline, upgraded);
     })(),
     compatibilityNote: undefined
   }));
