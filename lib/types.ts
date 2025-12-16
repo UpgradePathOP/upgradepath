@@ -22,6 +22,15 @@ export interface Gpu {
   price: number;
 }
 
+export interface Monitor {
+  id: string;
+  name: string;
+  resolution: Resolution;
+  refresh: number;
+  price: number;
+  notes?: string;
+}
+
 export interface GameProfile {
   id: string;
   name: string;
@@ -63,8 +72,8 @@ export interface AnalysisResult {
     reasons: string[];
   }>;
   recommendedParts: Array<{
-    category: 'CPU' | 'GPU';
-    items: Array<{ id: string; name: string; score: number; price: number; reason: string; compatibilityNote?: string }>;
+    category: 'CPU' | 'GPU' | 'RAM' | 'Storage' | 'Monitor';
+    items: Array<{ id: string; name: string; score?: number; price: number; reason: string; compatibilityNote?: string }>;
   }>;
   warnings: string[];
 }

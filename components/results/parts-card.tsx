@@ -1,7 +1,16 @@
 import { AnalysisResult } from '@/lib/types';
-import { HardDrive, Cpu, Monitor } from 'lucide-react';
+import { HardDrive, Cpu, Monitor, MemoryStick } from 'lucide-react';
 
 export function PartsCard({ recommendations }: { recommendations: AnalysisResult['recommendedParts'] }) {
+  const iconFor = (category: string) => {
+    if (category === 'CPU') return <Cpu className="w-4 h-4" />;
+    if (category === 'GPU') return <Monitor className="w-4 h-4" />;
+    if (category === 'RAM') return <MemoryStick className="w-4 h-4" />;
+    if (category === 'Storage') return <HardDrive className="w-4 h-4" />;
+    if (category === 'Monitor') return <Monitor className="w-4 h-4" />;
+    return null;
+  };
+
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg p-6 border border-slate-100 dark:border-slate-800">
       <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50 mb-4 flex items-center gap-2">
@@ -12,7 +21,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
         {recommendations.map(group => (
           <div key={group.category} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-3">
-              {group.category === 'CPU' ? <Cpu className="w-4 h-4" /> : <HardDrive className="w-4 h-4" />}
+              {iconFor(group.category)}
               <p className="font-semibold text-slate-900 dark:text-slate-50">{group.category} upgrades</p>
             </div>
             {group.items.length === 0 && (

@@ -1,11 +1,13 @@
 import cpus from '@/data/cpus.json';
 import gpus from '@/data/gpus.json';
 import games from '@/data/games.json';
-import { AnalysisInput, AnalysisResult, BudgetBucket, Cpu, GameProfile, Gpu } from './types';
+import monitors from '@/data/monitors.json';
+import { AnalysisInput, AnalysisResult, BudgetBucket, Cpu, GameProfile, Gpu, Monitor } from './types';
 
 const CPU_MAP: Record<string, Cpu> = Object.fromEntries((cpus as Cpu[]).map(c => [c.id, c]));
 const GPU_MAP: Record<string, Gpu> = Object.fromEntries((gpus as Gpu[]).map(g => [g.id, g]));
 const GAME_MAP: Record<string, GameProfile> = Object.fromEntries((games as GameProfile[]).map(g => [g.id, g]));
+const MONITOR_MAP: Record<string, Monitor> = Object.fromEntries((monitors as Monitor[]).map(m => [m.id, m]));
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -115,6 +117,73 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`,
     compatibilityNote: undefined
   }));
+}
+
+function suggestRam(input: AnalysisInput) {
+  const kits = [
+    { id: 'ram-16-3200', name: '16GB (2x8) DDR4-3200', price: 50, capacity: 16, type: 'DDR4' as const },
+    { id: 'ram-32-3600', name: '32GB (2x16) DDR4-3600', price: 90, capacity: 32, type: 'DDR4' as const },
+    { id: 'ram-32-6000', name: '32GB (2x16) DDR5-6000', price: 120, capacity: 32, type: 'DDR5' as const }
+  ];
+  const needMore = input.ramAmount < 16 ? 16 : input.ramAmount < 32 ? 32 : 0;
+  const matches = kits
+    .filter(k => (needMore ? k.capacity >= needMore : true))
+    .filter(k => input.ramSpeed.includes('DDR5') ? k.type === 'DDR5' : true);
+  return (matches.length ? matches : kits).slice(0, 2).map(k => ({
+    id: k.id,
+    name: k.name,
+    price: k.price,
+    reason: needMore ? `Jump to ${k.capacity}GB for smoother modern titles` : 'Faster RAM helps 1% lows'
+  }));
+}
+
+function suggestStorage(input: AnalysisInput) {
+  const options = [
+    { id: 'ssd-sata-1tb', name: '1TB SATA SSD', price: 55, type: 'SATA SSD' },
+    { id: 'ssd-nvme-1tb', name: '1TB NVMe Gen3', price: 75, type: 'NVMe' },
+    { id: 'ssd-nvme4-1tb', name: '1TB NVMe Gen4', price: 95, type: 'NVMe' }
+  ];
+  const filtered = options.filter(o => (input.storageType === 'HDD' ? true : o.type === 'NVMe'));
+  const picks = (filtered.length ? filtered : options).slice(0, 2);
+  return picks.map(o => ({
+    id: o.id,
+    name: o.name,
+    price: o.price,
+    reason: o.type === 'NVMe' ? 'NVMe = best load times and responsiveness' : 'SSD removes HDD hitching'
+  }));
+}
+
+function suggestMonitor(input: AnalysisInput, gpu: Gpu) {
+  const gpuScore = relevantGpuScore(gpu, input.resolution);
+  const limit = budgetLimit[input.budgetBucket];
+  const candidates = (monitors as Monitor[]).filter(m => m.price <= limit * 1.1);
+
+  // Determine target tier based on GPU strength
+  const target = (() => {
+    if (gpuScore >= 95) return { resolution: '4K' as const, refresh: 144 };
+    if (gpuScore >= 85) return { resolution: '1440p' as const, refresh: 240 };
+    if (gpuScore >= 70) return { resolution: '1440p' as const, refresh: 144 };
+    if (gpuScore >= 55) return { resolution: '1080p' as const, refresh: 240 };
+    return { resolution: '1080p' as const, refresh: 144 };
+  })();
+
+  const scored = candidates
+    .map(m => {
+      const resMatch = m.resolution === target.resolution ? 1 : 0.5;
+      const refreshMatch = m.refresh >= target.refresh ? 1 : 0.6;
+      const score = resMatch * 0.6 + refreshMatch * 0.4;
+      return { ...m, score };
+    })
+    .sort((a, b) => b.score - a.score || a.price - b.price)
+    .slice(0, 3)
+    .map(m => ({
+      id: m.id,
+      name: m.name,
+      price: m.price,
+      reason: `${m.resolution} @ ${m.refresh}Hz pairs well with your GPU`
+    }));
+
+  return scored;
 }
 
 export function analyzeSystem(input: AnalysisInput): AnalysisResult {
@@ -301,7 +370,10 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
 
   const recommendedParts: AnalysisResult['recommendedParts'] = [
     { category: 'CPU', items: suggestParts('CPU', input, cpu, gpu) },
-    { category: 'GPU', items: suggestParts('GPU', input, cpu, gpu) }
+    { category: 'GPU', items: suggestParts('GPU', input, cpu, gpu) },
+    { category: 'RAM', items: suggestRam(input) },
+    { category: 'Storage', items: suggestStorage(input) },
+    { category: 'Monitor', items: suggestMonitor(input, gpu) }
   ];
 
   // Motherboard/RAM warning if any CPU recommendation changes socket or memory type

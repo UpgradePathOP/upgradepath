@@ -1,0 +1,9 @@
+[
+  { "id": "1080-144-ips", "name": "1080p 144Hz IPS (24\")", "resolution": "1080p", "refresh": 144, "price": 170, "notes": "Great entry esports" },
+  { "id": "1080-240-fast", "name": "1080p 240Hz Fast IPS (25\")", "resolution": "1080p", "refresh": 240, "price": 230, "notes": "High-refresh esports" },
+  { "id": "1080-360-fast", "name": "1080p 360Hz Fast IPS (25\")", "resolution": "1080p", "refresh": 360, "price": 380, "notes": "Pro-level esports" },
+  { "id": "1440-144-ips", "name": "1440p 144Hz IPS (27\")", "resolution": "1440p", "refresh": 144, "price": 300, "notes": "Balanced clarity + speed" },
+  { "id": "1440-240-fast", "name": "1440p 240Hz Fast IPS (27\")", "resolution": "1440p", "refresh": 240, "price": 450, "notes": "High-end esports/AAA" },
+  { "id": "4k-144-ips", "name": "4K 144Hz IPS (27-32\")", "resolution": "4K", "refresh": 144, "price": 650, "notes": "Cinematic + smooth" },
+  { "id": "4k-120-ips", "name": "4K 120Hz IPS (27-32\")", "resolution": "4K", "refresh": 120, "price": 550, "notes": "Great visuals, moderate GPU need" }
+]
