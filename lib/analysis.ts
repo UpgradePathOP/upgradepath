@@ -287,11 +287,11 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   ];
 
   // Motherboard/RAM warning if any CPU recommendation changes socket or memory type
-  const needsBoard = recommendedParts[0].items.some(
-    item => item.compatibilityNote?.toLowerCase().includes('motherboard')
+  const needsBoard = recommendedParts[0].items.some(item =>
+    item.compatibilityNote ? item.compatibilityNote.toLowerCase().includes('motherboard') : false
   );
-  const needsRam = recommendedParts[0].items.some(
-    item => item.compatibilityNote?.toLowerCase().includes('ddr')
+  const needsRam = recommendedParts[0].items.some(item =>
+    item.compatibilityNote ? item.compatibilityNote.toLowerCase().includes('ddr') : false
   );
   if (needsBoard) warnings.push('CPU upgrade picks require a new motherboard (socket change).');
   if (needsRam) warnings.push('CPU upgrade picks may need DDR5 RAM and a matching board.');
