@@ -281,17 +281,17 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     warnings.push('4K gaming wants top-tier GPUs; consider 1440p for better smoothness.');
   }
 
-  const recommendedParts = [
+  const recommendedParts: AnalysisResult['recommendedParts'] = [
     { category: 'CPU', items: suggestParts('CPU', input, cpu, gpu) },
     { category: 'GPU', items: suggestParts('GPU', input, cpu, gpu) }
   ];
 
   // Motherboard/RAM warning if any CPU recommendation changes socket or memory type
   const needsBoard = recommendedParts[0].items.some(
-    item => item.compatibilityNote && item.compatibilityNote.toLowerCase().includes('motherboard')
+    item => item.compatibilityNote?.toLowerCase().includes('motherboard')
   );
   const needsRam = recommendedParts[0].items.some(
-    item => item.compatibilityNote && item.compatibilityNote.toLowerCase().includes('ddr')
+    item => item.compatibilityNote?.toLowerCase().includes('ddr')
   );
   if (needsBoard) warnings.push('CPU upgrade picks require a new motherboard (socket change).');
   if (needsRam) warnings.push('CPU upgrade picks may need DDR5 RAM and a matching board.');

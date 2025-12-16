@@ -5,6 +5,9 @@ import gpus from '@/data/gpus.json';
 const cpu = (id: string) => cpus.find(c => c.id === id)!.id;
 const gpu = (id: string) => gpus.find(g => g.id === id)!.id;
 
+// Basic typing guard: ensure suggestParts compatibilityNote doesn't break inference
+type _TestPartNote = NonNullable<ReturnType<typeof analyzeSystem>['recommendedParts'][0]['items'][number]['compatibilityNote']>;
+
 describe('analyzeSystem', () => {
   it('detects GPU-bound at high resolution', () => {
     const res = analyzeSystem({
