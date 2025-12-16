@@ -74,12 +74,13 @@ const relevantGpuScore = (gpu: Gpu, res: AnalysisInput['resolution']) =>
   res === '4K' ? gpu.score4k : res === '1440p' ? gpu.score1440 : gpu.score1080;
 
 const formatPrice = (value: number) => `$${value}`;
-const clampGain = (v: number) => Math.max(0, Math.min(120, Math.round(v)));
+const clampGain = (v: number) => Math.max(0, Math.min(95, Math.round(v)));
 
-const fpsGainFromScores = (current: number, next: number, factor = 1) => {
-  const delta = Math.max(0, next - current);
+const fpsGainFromScores = (current: number, next: number, weight = 1) => {
+  const delta = next - current;
   if (delta <= 0) return 0;
-  const base = (delta / Math.max(1, current)) * 100 * factor;
+  const ratio = delta / Math.max(40, current);
+  const base = ratio * 100 * weight;
   return clampGain(base);
 };
 
@@ -124,7 +125,11 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     score: relevantGpuScore(g, input.resolution),
     price: g.price,
     reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`,
-    percentGain: fpsGainFromScores(currentGpuScore, relevantGpuScore(g, input.resolution), input.resolution === '4K' ? 1.3 : input.resolution === '1440p' ? 1.1 : 0.9),
+    percentGain: fpsGainFromScores(
+      currentGpuScore,
+      relevantGpuScore(g, input.resolution),
+      input.resolution === '4K' ? 1 : input.resolution === '1440p' ? 0.9 : 0.8
+    ),
     compatibilityNote: undefined
   }));
 }
