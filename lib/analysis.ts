@@ -138,6 +138,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
       reason: `~+${c.score - currentScore} CPU score for ${formatPrice(c.price)}`,
       percentGain: (() => {
         const upgraded = estimateFps(c.score, relevantGpuScore(gpu, input.resolution), input, gamesProfiles);
+        if (baseline === 0 || upgraded === 0) return 0;
         const gain = baseline.raw > 0 ? ((upgraded.raw - baseline.raw) / baseline.raw) * 100 : 0;
         const cappedGain = baseline.effective > 0 ? ((upgraded.effective - baseline.effective) / baseline.effective) * 100 : gain;
         return clampGain(Math.max(gain * 0.8, cappedGain));
@@ -167,6 +168,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`,
     percentGain: (() => {
       const upgraded = estimateFps(cpu.score, relevantGpuScore(g, input.resolution), input, gamesProfiles);
+      if (baseline === 0 || upgraded === 0) return 0;
       const gain = baseline.raw > 0 ? ((upgraded.raw - baseline.raw) / baseline.raw) * 100 : 0;
       const cappedGain = baseline.effective > 0 ? ((upgraded.effective - baseline.effective) / baseline.effective) * 100 : gain;
       return clampGain(Math.max(gain * 0.8, cappedGain));
