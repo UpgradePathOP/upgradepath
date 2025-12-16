@@ -59,6 +59,7 @@ export interface AnalysisResult {
     type: 'CPU' | 'GPU' | 'MIXED';
     confidence: number;
     reasons: string[];
+    games?: Array<{ name: string; limitation: 'CPU' | 'GPU' | 'MIXED' }>;
   };
   bestValue: {
     category: string;

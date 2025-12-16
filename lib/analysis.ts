@@ -469,7 +469,8 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     verdict: {
       type: verdictType,
       confidence: Math.round(confidence),
-      reasons: reasons.slice(0, 3)
+      reasons: reasons.slice(0, 3),
+      games: perGame.map(g => ({ name: g.game.name, limitation: g.limitation }))
     },
     bestValue: {
       category: best.category,
