@@ -34,7 +34,13 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                     <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{item.name}</span>
                     <span className="text-xs text-slate-600 dark:text-slate-300">${item.price}</span>
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-300">Score: {item.score}</div>
+                  {typeof item.percentGain === 'number' ? (
+                    <div className="text-xs text-emerald-600 dark:text-emerald-300 font-semibold">
+                      Est. gain: +{item.percentGain}% FPS (target titles)
+                    </div>
+                  ) : item.score !== undefined ? (
+                    <div className="text-xs text-slate-500 dark:text-slate-300">Score: {item.score}</div>
+                  ) : null}
                   <div className="text-xs text-brand-700 dark:text-brand-200 mt-1">{item.reason}</div>
                   {item.compatibilityNote && (
                     <div className="text-xs text-amber-600 dark:text-amber-300 mt-1">

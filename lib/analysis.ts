@@ -74,6 +74,14 @@ const relevantGpuScore = (gpu: Gpu, res: AnalysisInput['resolution']) =>
   res === '4K' ? gpu.score4k : res === '1440p' ? gpu.score1440 : gpu.score1080;
 
 const formatPrice = (value: number) => `$${value}`;
+const clampGain = (v: number) => Math.max(0, Math.min(120, Math.round(v)));
+
+const fpsGainFromScores = (current: number, next: number, factor = 1) => {
+  const delta = Math.max(0, next - current);
+  if (delta <= 0) return 0;
+  const base = (delta / Math.max(1, current)) * 100 * factor;
+  return clampGain(base);
+};
 
 function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, gpu: Gpu) {
   const limit = budgetLimit[input.budgetBucket];
@@ -93,6 +101,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
       score: c.score,
       price: c.price,
       reason: `~+${c.score - currentScore} CPU score for ${formatPrice(c.price)}`,
+      percentGain: fpsGainFromScores(currentScore, c.score, 0.9),
       compatibilityNote:
         c.socket !== cpu.socket
           ? `Requires ${c.socket} motherboard (current: ${cpu.socket})`
@@ -115,6 +124,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     score: relevantGpuScore(g, input.resolution),
     price: g.price,
     reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`,
+    percentGain: fpsGainFromScores(currentGpuScore, relevantGpuScore(g, input.resolution), input.resolution === '4K' ? 1.3 : input.resolution === '1440p' ? 1.1 : 0.9),
     compatibilityNote: undefined
   }));
 }
@@ -133,7 +143,8 @@ function suggestRam(input: AnalysisInput) {
     id: k.id,
     name: k.name,
     price: k.price,
-    reason: needMore ? `Jump to ${k.capacity}GB for smoother modern titles` : 'Faster RAM helps 1% lows'
+    reason: needMore ? `Jump to ${k.capacity}GB for smoother modern titles` : 'Faster RAM helps 1% lows',
+    percentGain: needMore ? (k.capacity >= 32 ? 12 : 8) : 4
   }));
 }
 
@@ -149,7 +160,8 @@ function suggestStorage(input: AnalysisInput) {
     id: o.id,
     name: o.name,
     price: o.price,
-    reason: o.type === 'NVMe' ? 'NVMe = best load times and responsiveness' : 'SSD removes HDD hitching'
+    reason: o.type === 'NVMe' ? 'NVMe = best load times and responsiveness' : 'SSD removes HDD hitching',
+    percentGain: o.type === 'NVMe' ? 0 : 0
   }));
 }
 

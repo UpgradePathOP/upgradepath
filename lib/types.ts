@@ -73,7 +73,7 @@ export interface AnalysisResult {
   }>;
   recommendedParts: Array<{
     category: 'CPU' | 'GPU' | 'RAM' | 'Storage' | 'Monitor';
-    items: Array<{ id: string; name: string; score?: number; price: number; reason: string; compatibilityNote?: string }>;
+    items: Array<{ id: string; name: string; score?: number; price: number; reason: string; percentGain?: number; compatibilityNote?: string }>;
   }>;
   warnings: string[];
 }
