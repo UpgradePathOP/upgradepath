@@ -91,7 +91,8 @@ export default function Page() {
       window.history.replaceState(null, '', `?${params.toString()}`);
     } catch (e) {
       console.error(e);
-      alert('Could not analyze. Please check inputs.');
+      const message = e instanceof Error ? e.message : 'Could not analyze. Please check inputs.';
+      alert(message);
     } finally {
       setLoading(false);
     }

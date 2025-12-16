@@ -118,11 +118,12 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
 }
 
 export function analyzeSystem(input: AnalysisInput): AnalysisResult {
-  const cpu = CPU_MAP[input.cpuId];
-  const gpu = GPU_MAP[input.gpuId];
-  if (!cpu || !gpu) {
-    throw new Error('Invalid CPU or GPU selection.');
-  }
+  const cpu = CPU_MAP[input.cpuId] ?? (cpus as Cpu[])[0];
+  const gpu = GPU_MAP[input.gpuId] ?? (gpus as Gpu[])[0];
+  const fallbackWarnings: string[] = [];
+  if (!CPU_MAP[input.cpuId]) fallbackWarnings.push('Selected CPU not found; used nearest default.');
+  if (!GPU_MAP[input.gpuId]) fallbackWarnings.push('Selected GPU not found; used nearest default.');
+
   const selectedGames = input.games.map(id => GAME_MAP[id]).filter(Boolean);
   if (selectedGames.length === 0) {
     throw new Error('Select at least one game.');
@@ -329,6 +330,6 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     },
     upgradePath,
     recommendedParts,
-    warnings
+    warnings: [...fallbackWarnings, ...warnings]
   };
 }
