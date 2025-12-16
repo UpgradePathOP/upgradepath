@@ -84,7 +84,40 @@ const fpsGainFromScores = (current: number, next: number, weight = 1) => {
   return clampGain(base);
 };
 
-function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, gpu: Gpu) {
+const resolutionFpsScale: Record<AnalysisInput['resolution'], number> = {
+  '1080p': 1,
+  '1440p': 0.72,
+  '4K': 0.52
+};
+
+function estimateFps(cpuScore: number, gpuScore: number, input: AnalysisInput, gameProfiles: GameProfile[]) {
+  const resScale = resolutionFpsScale[input.resolution];
+  const refBoost = refreshBoost(input.refreshRate);
+  const resBoostVal = resolutionBoost(input.resolution);
+
+  if (gameProfiles.length === 0) return 0;
+
+  const perGame = gameProfiles.map(game => {
+    const baseTarget = game.type === 'esports' ? 280 : 140;
+    let cpuW = game.cpuWeight + refBoost;
+    let gpuW = game.gpuWeight + resBoostVal;
+    const total = cpuW + gpuW;
+    cpuW /= total;
+    gpuW /= total;
+
+    const cpuPerf = cpuScore * cpuW;
+    const gpuPerf = gpuScore * gpuW * resScale;
+    const bottleneckPerf = Math.min(cpuPerf, gpuPerf);
+    const fps = (bottleneckPerf / 80) * baseTarget;
+    return fps;
+  });
+
+  const avgFps = perGame.reduce((a, b) => a + b, 0) / perGame.length;
+  const effective = Math.min(avgFps, input.refreshRate + 10);
+  return { raw: avgFps, effective };
+}
+
+function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, gpu: Gpu, gamesProfiles: GameProfile[]) {
   const limit = budgetLimit[input.budgetBucket];
   const targetGain = category === 'CPU' ? 12 : 15;
 
@@ -96,13 +129,19 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
 
     const withinBudget = candidates.filter(c => c.price <= limit);
     const shortlist = (withinBudget.length > 0 ? withinBudget : candidates).slice(0, 3);
+    const baseline = estimateFps(cpu.score, relevantGpuScore(gpu, input.resolution), input, gamesProfiles);
     return shortlist.map(c => ({
       id: c.id,
       name: c.name,
       score: c.score,
       price: c.price,
       reason: `~+${c.score - currentScore} CPU score for ${formatPrice(c.price)}`,
-      percentGain: fpsGainFromScores(currentScore, c.score, 0.9),
+      percentGain: (() => {
+        const upgraded = estimateFps(c.score, relevantGpuScore(gpu, input.resolution), input, gamesProfiles);
+        const gain = baseline.raw > 0 ? ((upgraded.raw - baseline.raw) / baseline.raw) * 100 : 0;
+        const cappedGain = baseline.effective > 0 ? ((upgraded.effective - baseline.effective) / baseline.effective) * 100 : gain;
+        return clampGain(Math.max(gain * 0.8, cappedGain));
+      })(),
       compatibilityNote:
         c.socket !== cpu.socket
           ? `Requires ${c.socket} motherboard (current: ${cpu.socket})`
@@ -119,17 +158,19 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
 
   const withinBudget = candidates.filter(g => g.price <= limit);
   const shortlist = (withinBudget.length > 0 ? withinBudget : candidates).slice(0, 3);
+  const baseline = estimateFps(cpu.score, currentGpuScore, input, gamesProfiles);
   return shortlist.map(g => ({
     id: g.id,
     name: g.name,
     score: relevantGpuScore(g, input.resolution),
     price: g.price,
     reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`,
-    percentGain: fpsGainFromScores(
-      currentGpuScore,
-      relevantGpuScore(g, input.resolution),
-      input.resolution === '4K' ? 1 : input.resolution === '1440p' ? 0.9 : 0.8
-    ),
+    percentGain: (() => {
+      const upgraded = estimateFps(cpu.score, relevantGpuScore(g, input.resolution), input, gamesProfiles);
+      const gain = baseline.raw > 0 ? ((upgraded.raw - baseline.raw) / baseline.raw) * 100 : 0;
+      const cappedGain = baseline.effective > 0 ? ((upgraded.effective - baseline.effective) / baseline.effective) * 100 : gain;
+      return clampGain(Math.max(gain * 0.8, cappedGain));
+    })(),
     compatibilityNote: undefined
   }));
 }
@@ -394,8 +435,8 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   }
 
   const recommendedParts: AnalysisResult['recommendedParts'] = [
-    { category: 'CPU', items: suggestParts('CPU', input, cpu, gpu) },
-    { category: 'GPU', items: suggestParts('GPU', input, cpu, gpu) },
+    { category: 'CPU', items: suggestParts('CPU', input, cpu, gpu, selectedGames) },
+    { category: 'GPU', items: suggestParts('GPU', input, cpu, gpu, selectedGames) },
     { category: 'RAM', items: suggestRam(input) },
     { category: 'Storage', items: suggestStorage(input) },
     { category: 'Monitor', items: suggestMonitor(input, gpu) }
