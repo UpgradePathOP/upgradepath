@@ -1,7 +1,7 @@
-node_modules
 node_modules/
 .next/
 .env*
-node_modules/
-.next/
-.env*
+.vercel/
+
+# Large raw benchmark dump (keep curated version tracked instead)
+data/gpu_fps.json

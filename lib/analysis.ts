@@ -1,6 +1,7 @@
 import cpus from '@/data/cpus.json';
 import gpus from '@/data/gpus.json';
 import games from '@/data/games.json';
+import gpuFpsCurated from '@/data/gpu_fps_curated.json';
 import monitors from '@/data/monitors.json';
 import { AnalysisInput, AnalysisResult, BudgetBucket, Cpu, GameProfile, Gpu, Monitor } from './types';
 
@@ -74,15 +75,23 @@ const relevantGpuScore = (gpu: Gpu, res: AnalysisInput['resolution']) =>
   res === '4K' ? gpu.score4k : res === '1440p' ? gpu.score1440 : gpu.score1080;
 
 const formatPrice = (value: number) => `$${value}`;
-const clampGain = (v: number) => Math.max(0, Math.min(95, Math.round(v)));
 
-const fpsGainFromScores = (current: number, next: number, weight = 1) => {
-  const delta = next - current;
-  if (delta <= 0) return 0;
-  const ratio = delta / Math.max(40, current);
-  const base = ratio * 100 * weight;
-  return clampGain(base);
+type QualitySetting = 'ultra' | 'low';
+type CuratedFps = {
+  fps: Record<QualitySetting, Record<AnalysisInput['resolution'], Record<string, Record<string, number>>>>;
 };
+
+const CURATED_FPS = gpuFpsCurated as unknown as CuratedFps;
+
+function lookupCuratedFps(
+  gpuId: string,
+  gameId: string,
+  resolution: AnalysisInput['resolution'],
+  quality: QualitySetting
+) {
+  const fps = CURATED_FPS?.fps?.[quality]?.[resolution]?.[gpuId]?.[gameId];
+  return typeof fps === 'number' ? fps : null;
+}
 
 const percentFromFps = (baseline: { raw: number; effective: number }, upgraded: { raw: number; effective: number }) => {
   if (baseline.raw <= 0 || upgraded.raw <= 0) return 0;
@@ -96,37 +105,50 @@ const percentFromFps = (baseline: { raw: number; effective: number }, upgraded: 
   return Math.max(0, Math.min(80, Math.round(blended)));
 };
 
-const resolutionFpsScale: Record<AnalysisInput['resolution'], number> = {
-  '1080p': 1,
-  '1440p': 0.72,
-  '4K': 0.52
-};
+function estimateCpuCapFps(cpuScore: number, input: AnalysisInput, game: GameProfile, quality: QualitySetting) {
+  const isEsports = game.type === 'esports';
+  const base = isEsports ? (quality === 'low' ? 900 : 650) : 320;
+  const cpuFactor = Math.pow(cpuScore / 90, 1.25);
+  const refreshFactor = clamp(Math.pow(input.refreshRate / 144, isEsports ? 0.55 : 0.25), 0.6, 2.6);
+  return Math.max(30, base * cpuFactor * refreshFactor);
+}
 
-function estimateFps(cpuScore: number, gpuScore: number, input: AnalysisInput, gameProfiles: GameProfile[]) {
-  const resScale = resolutionFpsScale[input.resolution];
-  const refBoost = refreshBoost(input.refreshRate);
-  const resBoostVal = resolutionBoost(input.resolution);
+function fallbackGpuFps(gpuScore: number, game: GameProfile, input: AnalysisInput, quality: QualitySetting) {
+  const base = game.type === 'esports' ? (quality === 'low' ? 700 : 420) : 190;
+  const resPenalty = input.resolution === '4K' ? 0.7 : input.resolution === '1440p' ? 0.88 : 1;
+  return Math.max(15, (gpuScore / 100) * base * resPenalty);
+}
 
-  if (gameProfiles.length === 0) return 0;
+function estimateFps(cpu: Cpu, gpu: Gpu, input: AnalysisInput, gameProfiles: GameProfile[]) {
+  if (gameProfiles.length === 0) return { raw: 0, effective: 0, coverage: 0 };
 
-  const perGame = gameProfiles.map(game => {
-    const baseTarget = game.type === 'esports' ? 280 : 140;
-    let cpuW = game.cpuWeight + refBoost;
-    let gpuW = game.gpuWeight + resBoostVal;
-    const total = cpuW + gpuW;
-    cpuW /= total;
-    gpuW /= total;
+  let measured = 0;
+  const raw: number[] = [];
+  const effective: number[] = [];
 
-    const cpuPerf = cpuScore * cpuW;
-    const gpuPerf = gpuScore * gpuW * resScale;
-    const bottleneckPerf = Math.min(cpuPerf, gpuPerf);
-    const fps = (bottleneckPerf / 80) * baseTarget;
-    return fps;
-  });
+  for (const game of gameProfiles) {
+    const quality: QualitySetting = game.type === 'esports' ? 'low' : 'ultra';
 
-  const avgFps = perGame.reduce((a, b) => a + b, 0) / perGame.length;
-  const effective = Math.min(avgFps, input.refreshRate + 10);
-  return { raw: avgFps, effective };
+    const curated =
+      lookupCuratedFps(gpu.id, game.id, input.resolution, quality) ??
+      // soft fallbacks for equivalents (e.g. some ids reuse CS:GO for CS2)
+      lookupCuratedFps(gpu.id, game.id, input.resolution, 'ultra') ??
+      lookupCuratedFps(gpu.id, game.id, input.resolution, 'low');
+
+    const gpuCap =
+      curated !== null ? (measured++, curated) : fallbackGpuFps(relevantGpuScore(gpu, input.resolution), game, input, quality);
+
+    const cpuCap = estimateCpuCapFps(cpu.score, input, game, quality);
+    const final = Math.min(gpuCap, cpuCap);
+
+    raw.push(final);
+    effective.push(Math.min(final, input.refreshRate));
+  }
+
+  const rawAvg = raw.reduce((a, b) => a + b, 0) / raw.length;
+  const effAvg = effective.reduce((a, b) => a + b, 0) / effective.length;
+
+  return { raw: rawAvg, effective: effAvg, coverage: measured / gameProfiles.length };
 }
 
 function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, gpu: Gpu, gamesProfiles: GameProfile[]) {
@@ -142,7 +164,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     const withinBudget = candidates.filter(c => c.price <= limit);
     if (withinBudget.length === 0) return [];
     const shortlist = withinBudget.slice(0, 3);
-    const baseline = estimateFps(cpu.score, relevantGpuScore(gpu, input.resolution), input, gamesProfiles);
+    const baseline = estimateFps(cpu, gpu, input, gamesProfiles);
     return shortlist.map(c => ({
       id: c.id,
       name: c.name,
@@ -150,8 +172,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
       price: c.price,
       reason: `~+${c.score - currentScore} CPU score for ${formatPrice(c.price)}`,
       percentGain: (() => {
-        const upgraded = estimateFps(c.score, relevantGpuScore(gpu, input.resolution), input, gamesProfiles);
-        if (baseline === 0 || upgraded === 0) return 0;
+        const upgraded = estimateFps(c, gpu, input, gamesProfiles);
         return percentFromFps(baseline, upgraded);
       })(),
       compatibilityNote:
@@ -171,7 +192,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
   const withinBudget = candidates.filter(g => g.price <= limit);
   if (withinBudget.length === 0) return [];
   const shortlist = withinBudget.slice(0, 3);
-  const baseline = estimateFps(cpu.score, currentGpuScore, input, gamesProfiles);
+  const baseline = estimateFps(cpu, gpu, input, gamesProfiles);
   return shortlist.map(g => ({
     id: g.id,
     name: g.name,
@@ -179,8 +200,7 @@ function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, g
     price: g.price,
     reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`,
     percentGain: (() => {
-      const upgraded = estimateFps(cpu.score, relevantGpuScore(g, input.resolution), input, gamesProfiles);
-      if (baseline === 0 || upgraded === 0) return 0;
+      const upgraded = estimateFps(cpu, g, input, gamesProfiles);
       return percentFromFps(baseline, upgraded);
     })(),
     compatibilityNote: undefined
