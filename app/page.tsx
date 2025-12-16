@@ -13,8 +13,8 @@ import { ValueCard } from '@/components/results/value-card';
 import { UpgradePathCard } from '@/components/results/upgrade-path-card';
 import { WarningsCard } from '@/components/results/warnings-card';
 import { PartsCard } from '@/components/results/parts-card';
-import { Cpu, HardDrive, Monitor, Share2, Copy, TrendingUp, Loader2, Wand2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Cpu, HardDrive, Monitor, Share2, Copy, TrendingUp, Loader2, Wand2, Clock4 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 
 export default function Page() {
@@ -26,6 +26,8 @@ export default function Page() {
   });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const resultRef = useRef<HTMLDivElement | null>(null);
 
   const [form, setForm] = useState<AnalysisInput>({
     cpuId: cpus[3]?.id ?? '',
@@ -77,6 +79,7 @@ export default function Page() {
       // For MVP we can compute locally to avoid network while still mirroring the API shape.
       const analysis = analyzeSystem(form);
       setResult(analysis);
+      setLastUpdated(new Date().toLocaleTimeString());
       const params = new URLSearchParams({
         cpu: form.cpuId,
         gpu: form.gpuId,
@@ -93,6 +96,10 @@ export default function Page() {
           const state = window.history.state;
           if (state) {
             window.history.replaceState(state, '', `?${params.toString()}`);
+          }
+          // Smooth scroll to results on update
+          if (resultRef.current) {
+            resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         } catch (err) {
           console.warn('URL sync skipped', err);
@@ -329,8 +336,30 @@ ${result.warnings.map(w => `⚠ ${w}`).join('\n')}
         </section>
 
         {result && (
-          <section className="space-y-4">
-            <div className="flex gap-2 justify-end">
+          <section className="space-y-4" ref={resultRef}>
+            <div className="flex flex-wrap gap-2 items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <span
+                  className={clsx(
+                    'inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[11px]',
+                    loading
+                      ? 'border-amber-400 text-amber-600 dark:text-amber-300'
+                      : 'border-emerald-300 text-emerald-700 dark:text-emerald-300'
+                  )}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" /> Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Clock4 className="w-3 h-3" />
+                      Updated {lastUpdated ?? 'just now'}
+                    </>
+                  )}
+                </span>
+              </div>
+              <div className="flex gap-2">
               <button
                 onClick={handleShare}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-100 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition"
@@ -345,13 +374,26 @@ ${result.warnings.map(w => `⚠ ${w}`).join('\n')}
                 <Copy className="w-4 h-4" />
                 Copy results
               </button>
+              </div>
             </div>
 
-            <VerdictCard verdict={result.verdict} />
-            <ValueCard bestValue={result.bestValue} />
-            <UpgradePathCard upgrades={result.upgradePath} />
-            <PartsCard recommendations={result.recommendedParts} />
-            <WarningsCard warnings={result.warnings} />
+            <div className={clsx('relative transition-opacity', loading ? 'opacity-80' : 'opacity-100')}>
+              {loading && (
+                <div className="absolute inset-0 bg-white/40 dark:bg-slate-900/30 rounded-xl backdrop-blur-sm pointer-events-none z-10 flex items-center justify-center">
+                  <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Recomputing recommendations...
+                  </div>
+                </div>
+              )}
+              <div className="space-y-4">
+                <VerdictCard verdict={result.verdict} />
+                <ValueCard bestValue={result.bestValue} />
+                <UpgradePathCard upgrades={result.upgradePath} />
+                <PartsCard recommendations={result.recommendedParts} />
+                <WarningsCard warnings={result.warnings} />
+              </div>
+            </div>
           </section>
         )}
 
