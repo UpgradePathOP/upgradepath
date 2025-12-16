@@ -192,9 +192,11 @@ function suggestRam(input: AnalysisInput) {
     { id: 'ram-32-6000', name: '32GB (2x16) DDR5-6000', price: 120, capacity: 32, type: 'DDR5' as const }
   ];
   const needMore = input.ramAmount < 16 ? 16 : input.ramAmount < 32 ? 32 : 0;
+  const budgetLimitVal = budgetLimit[input.budgetBucket];
   const matches = kits
     .filter(k => (needMore ? k.capacity >= needMore : true))
-    .filter(k => input.ramSpeed.includes('DDR5') ? k.type === 'DDR5' : true);
+    .filter(k => input.ramSpeed.includes('DDR5') ? k.type === 'DDR5' : true)
+    .filter(k => k.price <= budgetLimitVal);
   return (matches.length ? matches : kits).slice(0, 2).map(k => ({
     id: k.id,
     name: k.name,
@@ -210,7 +212,10 @@ function suggestStorage(input: AnalysisInput) {
     { id: 'ssd-nvme-1tb', name: '1TB NVMe Gen3', price: 75, type: 'NVMe' },
     { id: 'ssd-nvme4-1tb', name: '1TB NVMe Gen4', price: 95, type: 'NVMe' }
   ];
-  const filtered = options.filter(o => (input.storageType === 'HDD' ? true : o.type === 'NVMe'));
+  const budgetLimitVal = budgetLimit[input.budgetBucket];
+  const filtered = options
+    .filter(o => (input.storageType === 'HDD' ? true : o.type === 'NVMe'))
+    .filter(o => o.price <= budgetLimitVal);
   const picks = (filtered.length ? filtered : options).slice(0, 2);
   return picks.map(o => ({
     id: o.id,
