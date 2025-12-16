@@ -280,7 +280,7 @@ ${result.warnings.map(w => `⚠ ${w}`).join('\n')}
                 onChange={e => setForm(prev => ({ ...prev, refreshRate: Number(e.target.value) }))}
                 className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900"
               >
-                {[60, 120, 144, 165, 240, 360].map(val => (
+                {[60, 120, 144, 165, 240, 360, 480, 540, 720].map(val => (
                   <option key={val} value={val}>
                     {val} Hz
                   </option>

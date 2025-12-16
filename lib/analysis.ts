@@ -40,7 +40,24 @@ const requiredGpuScore = (resolution: AnalysisInput['resolution']) =>
 const resolutionBoost = (resolution: AnalysisInput['resolution']) =>
   resolution === '4K' ? 0.22 : resolution === '1440p' ? 0.12 : 0;
 
-const refreshBoost = (refresh: number) => (refresh >= 240 ? 0.18 : refresh >= 165 ? 0.14 : refresh >= 144 ? 0.1 : refresh >= 120 ? 0.06 : 0);
+const refreshBoost = (refresh: number) =>
+  refresh >= 720
+    ? 0.36
+    : refresh >= 540
+    ? 0.3
+    : refresh >= 480
+    ? 0.25
+    : refresh >= 360
+    ? 0.2
+    : refresh >= 240
+    ? 0.18
+    : refresh >= 165
+    ? 0.14
+    : refresh >= 144
+    ? 0.1
+    : refresh >= 120
+    ? 0.06
+    : 0;
 
 const budgetLimit: Record<BudgetBucket, number> = {
   '$0-100': 100,
