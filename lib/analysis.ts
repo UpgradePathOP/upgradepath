@@ -784,10 +784,11 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     groupsWithItems.find(g => g.category === 'GPU') ||
     groupsWithItems[0];
   const bestItems = bestGroup?.items ?? [];
-  let bestValue = {
+  let bestValue: AnalysisResult['bestValue'] = {
     category: 'No major upgrade needed',
     impactSummary: 'System balanced for chosen titles',
-    reasons: ['Adjusting settings may yield better returns than new hardware']
+    reasons: ['Adjusting settings may yield better returns than new hardware'],
+    options: undefined
   };
 
   if (bestGroup && bestItems.length > 0) {
