@@ -12,39 +12,53 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg p-6 border border-slate-100 dark:border-slate-800">
+    <div className="bg-white dark:bg-surface rounded-xl shadow-lg p-6 border border-slate-100 dark:border-border">
       <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50 mb-4 flex items-center gap-2">
         <Monitor className="w-5 h-5" />
         Specific Part Picks (by budget)
       </h3>
       <div className="grid md:grid-cols-2 gap-4">
         {recommendations.map(group => (
-          <div key={group.category} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <div key={group.category} className="border border-slate-200 dark:border-border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-3">
               {iconFor(group.category)}
               <p className="font-semibold text-slate-900 dark:text-slate-50">{group.category} upgrades</p>
             </div>
             {group.items.length === 0 && (
-              <p className="text-sm text-slate-500">No clear upgrade within budget.</p>
+              <p className="text-sm text-slate-500 dark:text-muted">No clear upgrade within budget.</p>
             )}
             <div className="space-y-2">
               {group.items.map(item => (
-                <div key={item.id} className="bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3">
+                <div key={item.id} className="bg-slate-50 dark:bg-surface/70 rounded-lg p-3">
+                  {item.label && (
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-muted mb-1">
+                      {item.label}
+                    </p>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{item.name}</span>
                     <span className="text-xs text-slate-600 dark:text-slate-300">${item.price}</span>
                   </div>
-                  {typeof item.percentGain === 'number' ? (
-                    <div className="text-xs text-emerald-600 dark:text-emerald-300 font-semibold">
-                      Est. gain: +{item.percentGain}% FPS (target titles)
-                    </div>
-                  ) : item.score !== undefined ? (
-                    <div className="text-xs text-slate-500 dark:text-slate-300">Score: {item.score}</div>
-                  ) : null}
-                  <div className="text-xs text-brand-700 dark:text-brand-200 mt-1">{item.reason}</div>
-                  {item.compatibilityNote && (
-                    <div className="text-xs text-amber-600 dark:text-amber-300 mt-1">
-                      {item.compatibilityNote}
+                  <div className="mt-1 space-y-1">
+                    {item.partType === 'GPU' && typeof item.avgFpsGainPct === 'number' && item.avgFpsGainPct > 0 && (
+                      <div className="text-xs text-brand-600 dark:text-brand-400 font-semibold">
+                        Avg FPS: +{item.avgFpsGainPct}%
+                      </div>
+                    )}
+                    {item.qualitativeBullets.map((bullet, idx) => (
+                      <div key={`${item.id}-bullet-${idx}`} className="flex items-start gap-2">
+                        <div className="w-1 h-1 rounded-full bg-slate-400 mt-2" />
+                        <p className="text-xs text-slate-600 dark:text-slate-300">{bullet}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {item.notes.length > 0 && (
+                    <div className="mt-1 space-y-1">
+                      {item.notes.map((note, idx) => (
+                        <div key={`${item.id}-note-${idx}`} className="text-xs text-warning-600 dark:text-warning-300">
+                          {note}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

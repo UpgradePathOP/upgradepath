@@ -3,25 +3,42 @@ import { DollarSign } from 'lucide-react';
 
 export function ValueCard({ bestValue }: { bestValue: AnalysisResult['bestValue'] }) {
   return (
-    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-slate-800 dark:to-slate-900 rounded-xl shadow-lg p-6 border border-emerald-200 dark:border-slate-700">
+    <div className="bg-gradient-to-br from-brand-50 to-brand-100 dark:from-surface dark:to-[#111418] rounded-xl shadow-lg p-6 border border-brand-100 dark:border-border">
       <div className="flex items-start gap-3 mb-4">
-        <DollarSign className="w-6 h-6 text-emerald-600 dark:text-emerald-300 mt-1" />
+        <DollarSign className="w-6 h-6 text-brand-600 dark:text-brand-400 mt-1" />
         <div>
           <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Best Value Upgrade</h3>
-          <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{bestValue.category}</p>
-          <p className="text-sm text-emerald-700 dark:text-emerald-200 mt-1">
-            Estimated Impact: {bestValue.estimatedImpact}
-          </p>
+          <p className="text-2xl font-bold text-brand-700 dark:text-brand-400">{bestValue.category}</p>
+          <p className="text-sm text-brand-700 dark:text-brand-300 mt-1">{bestValue.impactSummary}</p>
         </div>
       </div>
       <div className="space-y-2">
         {bestValue.reasons.map((reason, i) => (
           <div key={i} className="flex items-start gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-2" />
+            <div className="w-1.5 h-1.5 rounded-full bg-brand-600 mt-2" />
             <p className="text-slate-700 dark:text-slate-200">{reason}</p>
           </div>
         ))}
       </div>
+      {bestValue.options && bestValue.options.length > 0 && (
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {bestValue.options.map(option => (
+            <div
+              key={option.label}
+              className="rounded-lg border border-slate-200 dark:border-border bg-white/60 dark:bg-surface/70 p-3"
+            >
+              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-muted">
+                {option.label}
+              </p>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{option.name}</span>
+                <span className="text-xs text-slate-600 dark:text-slate-300">${option.price}</span>
+              </div>
+              <p className="text-xs text-brand-700 dark:text-brand-300 mt-1">{option.impactSummary}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

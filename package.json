@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "extract:curated": "tsx scripts/extract-curated.ts"
   },
   "dependencies": {
     "clsx": "2.1.0",
@@ -23,6 +24,8 @@
     "@types/react-dom": "18.2.15",
     "autoprefixer": "10.4.16",
     "postcss": "8.4.31",
+    "stream-json": "1.8.0",
+    "tsx": "4.7.1",
     "typescript": "5.3.3",
     "vitest": "0.34.6"
   }

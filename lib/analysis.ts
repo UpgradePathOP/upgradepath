@@ -3,64 +3,83 @@ import gpus from '@/data/gpus.json';
 import games from '@/data/games.json';
 import gpuFpsCurated from '@/data/gpu_fps_curated.json';
 import monitors from '@/data/monitors.json';
-import { AnalysisInput, AnalysisResult, BudgetBucket, Cpu, GameProfile, Gpu, Monitor } from './types';
+import {
+  AnalysisInput,
+  AnalysisResult,
+  BudgetBucket,
+  BottleneckType,
+  Cpu,
+  GameCategory,
+  GameProfile,
+  Gpu,
+  Heaviness,
+  Monitor,
+  Resolution,
+  StorageType,
+  TypicalBound
+} from './types';
 
 const CPU_MAP: Record<string, Cpu> = Object.fromEntries((cpus as Cpu[]).map(c => [c.id, c]));
 const GPU_MAP: Record<string, Gpu> = Object.fromEntries((gpus as Gpu[]).map(g => [g.id, g]));
 const GAME_MAP: Record<string, GameProfile> = Object.fromEntries((games as GameProfile[]).map(g => [g.id, g]));
-const MONITOR_MAP: Record<string, Monitor> = Object.fromEntries((monitors as Monitor[]).map(m => [m.id, m]));
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-
-const getGpuScore = (gpu: Gpu, resolution: AnalysisInput['resolution']) => {
-  if (resolution === '4K') return gpu.score4k;
-  if (resolution === '1440p') return gpu.score1440;
-  return gpu.score1080;
+const harmonicMean = (values: number[]) => {
+  const valid = values.filter(v => v > 0);
+  if (valid.length === 0) return 0;
+  const denom = valid.reduce((sum, v) => sum + 1 / v, 0);
+  return denom > 0 ? valid.length / denom : 0;
 };
 
-const ramScore = (amount: number, speed: string) => {
-  const base = amount >= 64 ? 95 : amount >= 32 ? 88 : amount >= 16 ? 72 : amount >= 12 ? 55 : 35;
-  const speedBonus = speed.includes('DDR5')
-    ? 10
-    : speed.includes('6000')
-    ? 8
-    : speed.includes('5200')
-    ? 6
-    : speed.includes('3600')
-    ? 4
-    : speed.includes('3200')
-    ? 2
-    : 0;
-  return clamp(base + speedBonus, 0, 100);
+const CPU_GAMMA = 1.25;
+const GPU_GAMMA = 2.3;
+
+const CPU_CAP_TUNE: Record<GameCategory, number> = {
+  ESPORTS: 1.12,
+  AAA: 1,
+  UE5_AAA: 0.95,
+  SIM: 1,
+  INDIE: 1.05
 };
 
-const storageScore = (storage: AnalysisInput['storageType']) =>
-  storage === 'NVMe' ? 92 : storage === 'SATA SSD' ? 70 : 25;
+const CATEGORY_BASE_FPS: Record<GameCategory, number> = {
+  ESPORTS: 420,
+  AAA: 140,
+  UE5_AAA: 110,
+  SIM: 130,
+  INDIE: 180
+};
 
-const requiredGpuScore = (resolution: AnalysisInput['resolution']) =>
-  resolution === '4K' ? 85 : resolution === '1440p' ? 70 : 55;
+const RES_SCALE: Record<Resolution, number> = {
+  '1080p': 1,
+  '1440p': 0.72,
+  '4K': 0.48
+};
 
-const resolutionBoost = (resolution: AnalysisInput['resolution']) =>
-  resolution === '4K' ? 0.22 : resolution === '1440p' ? 0.12 : 0;
+const RES_DEMAND: Record<Resolution, number> = {
+  '1080p': 1,
+  '1440p': 1.35,
+  '4K': 2.2
+};
 
-const refreshBoost = (refresh: number) =>
+const refreshDemand = (refresh: number) =>
   refresh >= 720
-    ? 0.36
+    ? 2.35
     : refresh >= 540
-    ? 0.3
+    ? 2.05
     : refresh >= 480
-    ? 0.25
+    ? 1.9
     : refresh >= 360
-    ? 0.2
+    ? 1.7
     : refresh >= 240
-    ? 0.18
+    ? 1.5
     : refresh >= 165
-    ? 0.14
+    ? 1.28
     : refresh >= 144
-    ? 0.1
+    ? 1.18
     : refresh >= 120
-    ? 0.06
-    : 0;
+    ? 1.1
+    : 1;
 
 const budgetLimit: Record<BudgetBucket, number> = {
   '$0-100': 100,
@@ -68,146 +87,413 @@ const budgetLimit: Record<BudgetBucket, number> = {
   '$250-400': 400,
   '$400-700': 700,
   '$700-1200': 1200,
-  '$1200+': 2400
+  '$1200-1600': 1600,
+  '$1600-2000': 2000,
+  '$2000-2500': 2500,
+  '$2500+': 4000
 };
 
-const relevantGpuScore = (gpu: Gpu, res: AnalysisInput['resolution']) =>
-  res === '4K' ? gpu.score4k : res === '1440p' ? gpu.score1440 : gpu.score1080;
+const getGpuScore = (gpu: Gpu, resolution: AnalysisInput['resolution']) => {
+  if (resolution === '4K') return gpu.score4k;
+  if (resolution === '1440p') return gpu.score1440;
+  return gpu.score1080;
+};
 
-const formatPrice = (value: number) => `$${value}`;
+const cpuIndex = (score: number) => Math.pow(score / 100, CPU_GAMMA);
+const gpuIndex = (score: number) => Math.pow(score / 100, GPU_GAMMA);
+
+const resolveCategory = (game: GameProfile): GameCategory => {
+  if (game.category) return game.category;
+  return game.type === 'esports' ? 'ESPORTS' : 'AAA';
+};
+
+const resolveTypicalBound = (game: GameProfile): TypicalBound => {
+  if (game.typicalBound) return game.typicalBound;
+  const delta = game.cpuWeight - game.gpuWeight;
+  if (delta >= 0.12) return 'CPU_HEAVY';
+  if (delta <= -0.12) return 'GPU_HEAVY';
+  return 'MIXED';
+};
+
+const resolveHeaviness = (value: Heaviness | undefined, fallback: Heaviness): Heaviness =>
+  value ?? fallback;
+
+const resolveWeights = (game: GameProfile) => {
+  const cpu = clamp(game.cpuWeight ?? 0.5, 0.2, 0.8);
+  const gpu = clamp(game.gpuWeight ?? 0.5, 0.2, 0.8);
+  return { cpu, gpu };
+};
+
+const refreshInfluence = (
+  refreshRate: number,
+  gpuFps: number,
+  category: GameCategory,
+  targetFps: GameProfile['targetFPS']
+) => {
+  if (!Number.isFinite(gpuFps) || refreshRate <= 60) return 0;
+  const ratio = gpuFps / Math.max(refreshRate, 1);
+  const normalized = clamp((ratio - 0.7) / 0.5, 0, 1);
+  const focus = category === 'ESPORTS' || targetFps === 'high' ? 1 : targetFps === 'medium' ? 0.5 : 0.25;
+  return normalized * focus;
+};
+
+const getVramPressure = (vram: number, input: AnalysisInput, vramHeaviness: Heaviness) => {
+  const tier = vram >= 16 ? 16 : vram >= 12 ? 12 : vram >= 8 ? 8 : vram >= 6 ? 6 : 4;
+  const baseTable: Record<Heaviness, Record<number, number>> = {
+    LOW: { 4: 55, 6: 35, 8: 18, 12: 8, 16: 5 },
+    MED: { 4: 70, 6: 50, 8: 30, 12: 15, 16: 8 },
+    HIGH: { 4: 85, 6: 65, 8: 40, 12: 22, 16: 12 }
+  };
+  const base = baseTable[vramHeaviness][tier] ?? 25;
+  const resMultiplier = input.resolution === '4K' ? 1.25 : input.resolution === '1440p' ? 1.1 : 1;
+  return clamp(Math.round(base * resMultiplier), 0, 100);
+};
+
+const getStutterRisk = (input: AnalysisInput, streaming: Heaviness) => {
+  const storageBase = input.storageType === 'HDD' ? 72 : input.storageType === 'SATA SSD' ? 42 : 28;
+  const streamFactor = streaming === 'HIGH' ? 1.25 : streaming === 'MED' ? 1 : 0.75;
+  const ramPenalty = input.ramAmount < 12 ? 22 : input.ramAmount < 16 ? 12 : input.ramAmount >= 32 ? -6 : 0;
+  return clamp(Math.round(storageBase * streamFactor + ramPenalty), 0, 100);
+};
+
+const classifyHeadroom = (ratio: number): BottleneckType => {
+  if (ratio >= 1.12) return 'GPU_BOUND';
+  if (ratio <= 0.88) return 'CPU_BOUND';
+  return 'MIXED';
+};
+
+const bottleneckConfidence = (ratio: number, typicalBound: TypicalBound, classification: BottleneckType) => {
+  const distance = Math.abs(Math.log(ratio || 1));
+  const base = 0.55 + Math.min(0.35, distance * 0.35);
+  const hintMatch =
+    (classification === 'GPU_BOUND' && typicalBound === 'GPU_HEAVY') ||
+    (classification === 'CPU_BOUND' && typicalBound === 'CPU_HEAVY');
+  return clamp(base + (hintMatch ? 0.06 : 0), 0.55, 0.95);
+};
 
 type QualitySetting = 'ultra' | 'low';
 type CuratedFps = {
-  fps: Record<QualitySetting, Record<AnalysisInput['resolution'], Record<string, Record<string, number>>>>;
+  fps: Record<QualitySetting, Record<Resolution, Record<string, Record<string, number>>>>;
+  gpus?: Record<string, string>;
 };
 
 const CURATED_FPS = gpuFpsCurated as unknown as CuratedFps;
+const CURATED_GPU_IDS = new Set(Object.keys(CURATED_FPS?.gpus ?? {}));
 
-function lookupCuratedFps(
-  gpuId: string,
-  gameId: string,
-  resolution: AnalysisInput['resolution'],
-  quality: QualitySetting
-) {
+function lookupCuratedFps(gpuId: string, gameId: string, resolution: Resolution, quality: QualitySetting) {
   const fps = CURATED_FPS?.fps?.[quality]?.[resolution]?.[gpuId]?.[gameId];
   return typeof fps === 'number' ? fps : null;
 }
 
-const percentFromFps = (baseline: { raw: number; effective: number }, upgraded: { raw: number; effective: number }) => {
-  if (baseline.raw <= 0 || upgraded.raw <= 0) return 0;
-  const rawGain = ((upgraded.raw - baseline.raw) / baseline.raw) * 100;
-  const effGain =
-    baseline.effective > 0
-      ? ((upgraded.effective - baseline.effective) / baseline.effective) * 100
-      : rawGain;
-  // Blend raw and capped, then clamp to avoid every card hitting max
-  const blended = rawGain * 0.6 + effGain * 0.4;
-  return Math.max(0, Math.min(80, Math.round(blended)));
+type GameMetrics = {
+  game: GameProfile;
+  category: GameCategory;
+  typicalBound: TypicalBound;
+  headroomRatio: number;
+  boundType: BottleneckType;
+  confidence: number;
+  cpuThroughput: number;
+  gpuThroughput: number;
+  fpsTypical: number;
+  effectiveFps: number;
+  stutterRisk: number;
+  vramPressure: number;
+  hasBenchmark: boolean;
+  gpuIndexValue: number;
 };
 
-function estimateCpuCapFps(cpuScore: number, input: AnalysisInput, game: GameProfile, quality: QualitySetting) {
-  const isEsports = game.type === 'esports';
-  const base = isEsports ? (quality === 'low' ? 900 : 650) : 320;
-  const cpuFactor = Math.pow(cpuScore / 90, 1.25);
-  const refreshFactor = clamp(Math.pow(input.refreshRate / 144, isEsports ? 0.55 : 0.25), 0.6, 2.6);
-  return Math.max(30, base * cpuFactor * refreshFactor);
-}
+type FpsReference = {
+  fpsTypical: number;
+  gpuIndexValue: number;
+};
 
-function fallbackGpuFps(gpuScore: number, game: GameProfile, input: AnalysisInput, quality: QualitySetting) {
-  const base = game.type === 'esports' ? (quality === 'low' ? 700 : 420) : 190;
-  const resPenalty = input.resolution === '4K' ? 0.7 : input.resolution === '1440p' ? 0.88 : 1;
-  return Math.max(15, (gpuScore / 100) * base * resPenalty);
-}
+function computeGameMetrics(
+  cpu: Cpu,
+  gpu: Gpu,
+  input: AnalysisInput,
+  game: GameProfile,
+  reference?: FpsReference
+): GameMetrics {
+  const category = resolveCategory(game);
+  const typicalBound = resolveTypicalBound(game);
+  const weights = resolveWeights(game);
 
-function estimateFps(cpu: Cpu, gpu: Gpu, input: AnalysisInput, gameProfiles: GameProfile[]) {
-  if (gameProfiles.length === 0) return { raw: 0, effective: 0, coverage: 0 };
+  const gpuScore = getGpuScore(gpu, input.resolution);
+  const gpuIndexValue =
+    gpuIndex(gpuScore) /
+    (RES_DEMAND[input.resolution] * (0.6 + weights.gpu) * (typicalBound === 'GPU_HEAVY' ? 1.08 : 1));
 
-  let measured = 0;
-  const raw: number[] = [];
-  const effective: number[] = [];
+  const quality: QualitySetting = category === 'ESPORTS' ? 'low' : 'ultra';
+  const curated = lookupCuratedFps(gpu.id, game.id, input.resolution, quality);
+  const baseFps = CATEGORY_BASE_FPS[category] * RES_SCALE[input.resolution];
+  let gpuFps = curated ?? baseFps * gpuIndex(getGpuScore(gpu, input.resolution));
 
-  for (const game of gameProfiles) {
-    const quality: QualitySetting = game.type === 'esports' ? 'low' : 'ultra';
-
-    const curated =
-      lookupCuratedFps(gpu.id, game.id, input.resolution, quality) ??
-      // soft fallbacks for equivalents (e.g. some ids reuse CS:GO for CS2)
-      lookupCuratedFps(gpu.id, game.id, input.resolution, 'ultra') ??
-      lookupCuratedFps(gpu.id, game.id, input.resolution, 'low');
-
-    const gpuCap =
-      curated !== null ? (measured++, curated) : fallbackGpuFps(relevantGpuScore(gpu, input.resolution), game, input, quality);
-
-    const cpuCap = estimateCpuCapFps(cpu.score, input, game, quality);
-    const final = Math.min(gpuCap, cpuCap);
-
-    raw.push(final);
-    effective.push(Math.min(final, input.refreshRate));
+  if (curated === null && reference && reference.gpuIndexValue > 0) {
+    const ratio = gpuIndex(getGpuScore(gpu, input.resolution)) / reference.gpuIndexValue;
+    gpuFps = reference.fpsTypical * ratio;
   }
 
-  const rawAvg = raw.reduce((a, b) => a + b, 0) / raw.length;
-  const effAvg = effective.reduce((a, b) => a + b, 0) / effective.length;
+  const refreshScale = refreshDemand(input.refreshRate);
+  const refreshWeight = refreshInfluence(input.refreshRate, gpuFps, category, game.targetFPS);
+  const refreshPenalty = 1 + (refreshScale - 1) * refreshWeight;
 
-  return { raw: rawAvg, effective: effAvg, coverage: measured / gameProfiles.length };
+  const cpuThroughputBase =
+    (cpuIndex(cpu.score) * CPU_CAP_TUNE[category]) /
+    ((0.6 + weights.cpu) * (typicalBound === 'CPU_HEAVY' ? 1.08 : 1));
+  const cpuThroughput = cpuThroughputBase / refreshPenalty;
+  const headroomRatio = cpuThroughput / gpuIndexValue;
+  const boundType = classifyHeadroom(headroomRatio);
+  const confidence = bottleneckConfidence(headroomRatio, typicalBound, boundType);
+
+  const fpsTypical = headroomRatio < 1 ? gpuFps * headroomRatio : gpuFps;
+  const refreshCap = input.refreshRate > 0 ? input.refreshRate * 1.05 : Infinity;
+  const effectiveFps = Math.min(fpsTypical, refreshCap);
+
+  const vramHeaviness = resolveHeaviness(game.vramHeaviness, game.vramHeavy ? 'HIGH' : 'MED');
+  const streamingHeaviness = resolveHeaviness(game.streamingHeaviness, category === 'ESPORTS' ? 'LOW' : 'MED');
+  const vramPressure = getVramPressure(gpu.vram, input, vramHeaviness);
+  const stutterRisk = getStutterRisk(input, streamingHeaviness);
+
+  return {
+    game,
+    category,
+    typicalBound,
+    headroomRatio,
+    boundType,
+    confidence,
+    cpuThroughput,
+    gpuThroughput: gpuIndexValue,
+    fpsTypical,
+    effectiveFps,
+    stutterRisk,
+    vramPressure,
+    hasBenchmark: curated !== null,
+    gpuIndexValue: gpuIndex(getGpuScore(gpu, input.resolution))
+  };
 }
 
-function suggestParts(category: 'CPU' | 'GPU', input: AnalysisInput, cpu: Cpu, gpu: Gpu, gamesProfiles: GameProfile[]) {
+type AggregateMetrics = {
+  perGame: GameMetrics[];
+  headroomRatio: number;
+  boundType: BottleneckType;
+  confidence: number;
+  fpsTypicalAvg: number;
+  effectiveFpsAvg: number;
+  stutterRiskAvg: number;
+  vramPressureAvg: number;
+  benchmarkCoverage: number;
+};
+
+function aggregateMetrics(
+  cpu: Cpu,
+  gpu: Gpu,
+  input: AnalysisInput,
+  gamesProfiles: GameProfile[],
+  referenceMap?: Record<string, FpsReference>
+): AggregateMetrics {
+  const perGame = gamesProfiles.map(game => {
+    const reference = referenceMap?.[game.id];
+    return computeGameMetrics(cpu, gpu, input, game, reference);
+  });
+
+  const cpuEff = harmonicMean(perGame.map(g => g.cpuThroughput));
+  const gpuEff = harmonicMean(perGame.map(g => g.gpuThroughput));
+  const headroomRatio = cpuEff > 0 && gpuEff > 0 ? cpuEff / gpuEff : 1;
+  const boundType = classifyHeadroom(headroomRatio);
+  const matchRatio =
+    perGame.length > 0 ? perGame.filter(g => g.boundType === boundType).length / perGame.length : 0;
+  const confidence = clamp(0.55 + Math.abs(Math.log(headroomRatio)) * 0.35 + matchRatio * 0.08, 0.55, 0.95);
+
+  const fpsTypicalAvg = perGame.reduce((s, g) => s + g.fpsTypical, 0) / perGame.length;
+  const effectiveFpsAvg = perGame.reduce((s, g) => s + g.effectiveFps, 0) / perGame.length;
+  const stutterRiskAvg = perGame.reduce((s, g) => s + g.stutterRisk, 0) / perGame.length;
+  const vramPressureAvg = perGame.reduce((s, g) => s + g.vramPressure, 0) / perGame.length;
+  const benchmarkCoverage =
+    perGame.length > 0 ? perGame.filter(g => g.hasBenchmark).length / perGame.length : 0;
+
+  return {
+    perGame,
+    headroomRatio,
+    boundType,
+    confidence,
+    fpsTypicalAvg,
+    effectiveFpsAvg,
+    stutterRiskAvg,
+    vramPressureAvg,
+    benchmarkCoverage
+  };
+}
+
+const calcAvgFpsGainPct = (baseline: AggregateMetrics, candidate: AggregateMetrics) => {
+  const base = baseline.fpsTypicalAvg;
+  const next = candidate.fpsTypicalAvg;
+  if (base <= 0) return 0;
+  const floor = Math.max(base, 45);
+  return ((next - base) / floor) * 100;
+};
+
+const calcUtilityGainPct = (baseline: AggregateMetrics, candidate: AggregateMetrics) => {
+  const base = baseline.effectiveFpsAvg;
+  const next = candidate.effectiveFpsAvg;
+  if (base <= 0) return 0;
+  const floor = Math.max(base, 45);
+  return ((next - base) / floor) * 100;
+};
+
+function suggestParts(
+  category: 'CPU' | 'GPU',
+  input: AnalysisInput,
+  cpu: Cpu,
+  gpu: Gpu,
+  gamesProfiles: GameProfile[],
+  baseline: AggregateMetrics,
+  referenceMap: Record<string, FpsReference>
+) {
   const limit = budgetLimit[input.budgetBucket];
-  const targetGain = category === 'CPU' ? 12 : 15;
+  const targetGain = category === 'CPU' ? 6 : 8;
 
   if (category === 'CPU') {
     const currentScore = cpu.score;
+    const cpuHeavyCount = gamesProfiles.filter(g => resolveTypicalBound(g) === 'CPU_HEAVY').length;
     const candidates = (cpus as Cpu[])
       .filter(c => c.score > currentScore + targetGain)
-      .sort((a, b) => (b.score - currentScore) / b.price - (a.score - currentScore) / a.price);
-
-    const withinBudget = candidates.filter(c => c.price <= limit);
-    if (withinBudget.length === 0) return [];
-    const shortlist = withinBudget.slice(0, 3);
-    const baseline = estimateFps(cpu, gpu, input, gamesProfiles);
-    return shortlist.map(c => ({
-      id: c.id,
-      name: c.name,
-      score: c.score,
-      price: c.price,
-      reason: `~+${c.score - currentScore} CPU score for ${formatPrice(c.price)}`,
-      percentGain: (() => {
-        const upgraded = estimateFps(c, gpu, input, gamesProfiles);
-        return percentFromFps(baseline, upgraded);
-      })(),
-      compatibilityNote:
-        c.socket !== cpu.socket
-          ? `Requires ${c.socket} motherboard (current: ${cpu.socket})`
-          : c.memoryType !== cpu.memoryType
-          ? `New board likely needed (DDR type: ${c.memoryType})`
-          : undefined
-    }));
+      .filter(c => c.socket === cpu.socket && c.memoryType === cpu.memoryType)
+      .sort((a, b) => (b.score - currentScore) / b.price - (a.score - currentScore) / a.price)
+      .filter(c => c.price <= limit)
+      .slice(0, 3);
+    return candidates.map(c => {
+      const bullets: string[] = [];
+      if (baseline.boundType === 'CPU_BOUND') {
+        bullets.push('Largest gains when CPU-limited.');
+      }
+      if (input.refreshRate >= 144) {
+        bullets.push(`Better headroom for ${input.refreshRate}Hz targets.`);
+      }
+      if (cpuHeavyCount > 0) {
+        bullets.push('Improves frame pacing in CPU-heavy titles.');
+      }
+      if (bullets.length === 0) {
+        bullets.push('Balanced CPU uplift for mixed workloads.');
+      }
+      const notes: string[] = [];
+      if (c.socket !== cpu.socket) {
+        notes.push(`Requires ${c.socket} motherboard (current: ${cpu.socket})`);
+      }
+      if (c.memoryType !== cpu.memoryType) {
+        notes.push(`Memory type change: ${c.memoryType} (current: ${cpu.memoryType})`);
+      }
+      return {
+        id: c.id,
+        partType: 'CPU',
+        name: c.name,
+        price: c.price,
+        qualitativeBullets: bullets.slice(0, 2),
+        notes
+      };
+    });
   }
 
-  const currentGpuScore = relevantGpuScore(gpu, input.resolution);
-  const candidates = (gpus as Gpu[])
-    .filter(g => relevantGpuScore(g, input.resolution) > currentGpuScore + targetGain)
-    .sort((a, b) => (relevantGpuScore(b, input.resolution) - currentGpuScore) / b.price - (relevantGpuScore(a, input.resolution) - currentGpuScore) / a.price);
+  const rawCurrentGpuScore = getGpuScore(gpu, input.resolution);
+  const currentGpuScore = Number.isFinite(rawCurrentGpuScore) ? rawCurrentGpuScore : 0;
+  const gpuHeavyCount = gamesProfiles.filter(g => resolveTypicalBound(g) === 'GPU_HEAVY').length;
+  const baseList = (gpus as Gpu[]).filter(g => g.price <= limit);
+  let filtered = baseList.filter(g => getGpuScore(g, input.resolution) > currentGpuScore + targetGain);
+  if (filtered.length === 0) {
+    filtered = baseList.filter(g => g.id !== gpu.id);
+  }
+  const candidates = filtered.map(g => {
+    const candidateAgg = aggregateMetrics(cpu, g, input, gamesProfiles, referenceMap);
+    const avgGain = Math.max(0, Math.round(calcAvgFpsGainPct(baseline, candidateAgg)));
+    const utilityGain = Math.max(0, Math.round(calcUtilityGainPct(baseline, candidateAgg)));
+    const rawScore = getGpuScore(g, input.resolution);
+    const estimated = candidateAgg.benchmarkCoverage < 0.5;
+    const isCuratedGpu = CURATED_GPU_IDS.has(g.id);
+    return {
+      gpu: g,
+      avgGain,
+      utilityGain,
+      rawScore,
+      estimated,
+      isCuratedGpu,
+      effectiveFps: candidateAgg.effectiveFpsAvg,
+      valueScore: utilityGain / Math.max(g.price, 1),
+      balanceScore: utilityGain / Math.sqrt(Math.max(g.price, 1))
+    };
+  });
 
-  const withinBudget = candidates.filter(g => g.price <= limit);
-  if (withinBudget.length === 0) return [];
-  const shortlist = withinBudget.slice(0, 3);
-  const baseline = estimateFps(cpu, gpu, input, gamesProfiles);
-  return shortlist.map(g => ({
-    id: g.id,
-    name: g.name,
-    score: relevantGpuScore(g, input.resolution),
-    price: g.price,
-    reason: `~+${relevantGpuScore(g, input.resolution) - currentGpuScore} GPU score for ${formatPrice(g.price)}`,
-    percentGain: (() => {
-      const upgraded = estimateFps(cpu, g, input, gamesProfiles);
-      return percentFromFps(baseline, upgraded);
-    })(),
-    compatibilityNote: undefined
-  }));
+  if (candidates.length === 0) return [];
+
+  const curatedCandidates = candidates.filter(c => c.isCuratedGpu);
+  const curatedPool = curatedCandidates.length ? curatedCandidates : candidates;
+  const validated = curatedPool.filter(c => !c.estimated);
+  const valuePool = validated.length ? validated : curatedPool;
+  const byValue = [...valuePool].sort((a, b) => b.valueScore - a.valueScore);
+  const byPerf = [...curatedPool].sort((a, b) => b.rawScore - a.rawScore || b.avgGain - a.avgGain);
+  const byBalanced = [...valuePool].sort((a, b) => b.balanceScore - a.balanceScore);
+
+  const used = new Set<string>();
+  const pickUnique = (list: typeof candidates) => list.find(item => !used.has(item.gpu.id)) ?? list[0];
+  const picks: Array<{ label: string; candidate: (typeof candidates)[number] }> = [];
+  const addPick = (label: string, list: typeof candidates) => {
+    const pick = pickUnique(list);
+    if (!pick) return;
+    used.add(pick.gpu.id);
+    picks.push({ label, candidate: pick });
+  };
+
+  const bestPerf = byPerf[0];
+  if (bestPerf) {
+    used.add(bestPerf.gpu.id);
+    picks.push({ label: 'Best performance', candidate: bestPerf });
+  }
+  addPick('Best value', byValue);
+  addPick('Balanced', byBalanced);
+
+  const labelOrder = ['Best value', 'Best performance', 'Balanced'];
+  picks.sort((a, b) => labelOrder.indexOf(a.label) - labelOrder.indexOf(b.label));
+
+  return picks.map(({ label, candidate }) => {
+    const g = candidate.gpu;
+    const isUnvalidated = !candidate.isCuratedGpu;
+    const avgFpsGainPct = candidate.isCuratedGpu ? candidate.avgGain : undefined;
+    const bullets: string[] = [];
+    if (candidate.estimated || isUnvalidated) {
+      bullets.push('Estimated performance; limited benchmark coverage.');
+    }
+    if (baseline.boundType === 'GPU_BOUND') {
+      bullets.push('Largest FPS gains for your selection.');
+    }
+    if (g.vram > gpu.vram) {
+      bullets.push('More VRAM headroom for high textures.');
+    }
+    if (input.resolution !== '1080p') {
+      bullets.push(`Better suited for ${input.resolution} gaming.`);
+    }
+    if (gpuHeavyCount > 0) {
+      bullets.push('Stronger GPU headroom for visually demanding titles.');
+    }
+    const targetFps = input.refreshRate;
+    if (candidate.effectiveFps >= targetFps * 0.98) {
+      bullets.push('Diminishing returns at current refresh; higher resolution benefits more.');
+    }
+    if (bullets.length === 0) {
+      bullets.push('Balanced GPU uplift for mixed workloads.');
+    }
+    return {
+      id: g.id,
+      partType: 'GPU',
+      name: g.name,
+      label,
+      price: g.price,
+      avgFpsGainPct,
+      estimated: candidate.estimated || isUnvalidated,
+      qualitativeBullets: bullets.slice(0, 2),
+      notes: []
+    };
+  });
 }
 
-function suggestRam(input: AnalysisInput) {
+function suggestRam(input: AnalysisInput, cpu: Cpu) {
   const kits = [
     { id: 'ram-16-3200', name: '16GB (2x8) DDR4-3200', price: 50, capacity: 16, type: 'DDR4' as const },
     { id: 'ram-32-3600', name: '32GB (2x16) DDR4-3600', price: 90, capacity: 32, type: 'DDR4' as const },
@@ -217,76 +503,114 @@ function suggestRam(input: AnalysisInput) {
   const budgetLimitVal = budgetLimit[input.budgetBucket];
   const matches = kits
     .filter(k => (needMore ? k.capacity >= needMore : true))
-    .filter(k => input.ramSpeed.includes('DDR5') ? k.type === 'DDR5' : true)
-    .filter(k => k.price <= budgetLimitVal);
-  return (matches.length ? matches : kits).slice(0, 2).map(k => ({
-    id: k.id,
-    name: k.name,
-    price: k.price,
-    reason: needMore ? `Jump to ${k.capacity}GB for smoother modern titles` : 'Faster RAM helps 1% lows',
-    percentGain: needMore ? (k.capacity >= 32 ? 12 : 8) : 4
-  }));
+    .filter(k => k.type === cpu.memoryType)
+    .filter(k => k.price <= budgetLimitVal)
+    .slice(0, 2);
+  return matches.map(k => {
+    const bullets: string[] = [];
+    if (input.ramAmount < 16 && k.capacity >= 16) {
+      bullets.push('Reaches the 16GB baseline for modern titles.');
+    }
+    if (input.ramAmount < 32 && k.capacity >= 32) {
+      bullets.push('More headroom for large open-world games and multitasking.');
+    }
+    if (bullets.length === 0) {
+      bullets.push('Small average FPS change; improves stability in heavy scenes.');
+    }
+    return {
+      id: k.id,
+      partType: 'RAM',
+      name: k.name,
+      price: k.price,
+      qualitativeBullets: bullets.slice(0, 2),
+      notes: []
+    };
+  });
 }
 
 function suggestStorage(input: AnalysisInput) {
   const options = [
-    { id: 'ssd-sata-1tb', name: '1TB SATA SSD', price: 55, type: 'SATA SSD' },
-    { id: 'ssd-nvme-1tb', name: '1TB NVMe Gen3', price: 75, type: 'NVMe' },
-    { id: 'ssd-nvme4-1tb', name: '1TB NVMe Gen4', price: 95, type: 'NVMe' }
+    { id: 'ssd-sata-1tb', name: '1TB SATA SSD', price: 55, type: 'SATA SSD' as StorageType },
+    { id: 'ssd-nvme-1tb', name: '1TB NVMe Gen3', price: 75, type: 'NVMe' as StorageType },
+    { id: 'ssd-nvme4-1tb', name: '1TB NVMe Gen4', price: 95, type: 'NVMe' as StorageType }
   ];
   const budgetLimitVal = budgetLimit[input.budgetBucket];
-  const filtered = options
-    .filter(o => (input.storageType === 'HDD' ? true : o.type === 'NVMe'))
-    .filter(o => o.price <= budgetLimitVal);
-  const picks = (filtered.length ? filtered : options).slice(0, 2);
-  return picks.map(o => ({
-    id: o.id,
-    name: o.name,
-    price: o.price,
-    reason: o.type === 'NVMe' ? 'NVMe = best load times and responsiveness' : 'SSD removes HDD hitching',
-    percentGain: o.type === 'NVMe' ? 0 : 0
-  }));
+  const baseOptions =
+    input.storageType === 'HDD'
+      ? options
+      : input.storageType === 'SATA SSD'
+      ? options.filter(o => o.type === 'NVMe')
+      : [];
+  const picks = baseOptions.filter(o => o.price <= budgetLimitVal).slice(0, 2);
+  return picks.map(o => {
+    const fromHdd = input.storageType === 'HDD';
+    const bullets: string[] = [];
+    if (fromHdd) {
+      bullets.push('Much faster load times in large games.');
+      bullets.push('Less traversal hitching in streaming-heavy titles.');
+    } else {
+      bullets.push('Slightly faster loads and installs.');
+      bullets.push('Average FPS usually unchanged.');
+    }
+    return {
+      id: o.id,
+      partType: 'STORAGE',
+      name: o.name,
+      price: o.price,
+      qualitativeBullets: bullets,
+      notes: []
+    };
+  });
 }
 
-function suggestMonitor(input: AnalysisInput, gpu: Gpu) {
-  const gpuScore = relevantGpuScore(gpu, input.resolution);
-  const limit = budgetLimit[input.budgetBucket];
+function suggestMonitor(input: AnalysisInput, aggregate: AggregateMetrics) {
   const catalog = monitors as Monitor[];
+  const esportsGames = aggregate.perGame.filter(g => g.category === 'ESPORTS');
+  const esportsAvg = esportsGames.length
+    ? esportsGames.reduce((s, g) => s + g.effectiveFps, 0) / esportsGames.length
+    : 0;
+  const overallAvg = aggregate.effectiveFpsAvg;
+  const targetFps = esportsGames.length ? esportsAvg : overallAvg;
+  const budgetLimitVal = budgetLimit[input.budgetBucket];
 
-  // Define target tiers by GPU strength
-  const target = (() => {
-    if (gpuScore >= 100) return { resolution: '4K' as const, refresh: 240 };
-    if (gpuScore >= 95) return { resolution: '4K' as const, refresh: 165 };
-    if (gpuScore >= 90) return { resolution: '4K' as const, refresh: 144 };
-    if (gpuScore >= 85) return { resolution: '1440p' as const, refresh: 360 };
-    if (gpuScore >= 75) return { resolution: '1440p' as const, refresh: 240 };
-    if (gpuScore >= 65) return { resolution: '1440p' as const, refresh: 165 };
-    if (gpuScore >= 55) return { resolution: '1080p' as const, refresh: 240 };
-    return { resolution: '1080p' as const, refresh: 144 };
-  })();
+  const maxRefresh =
+    targetFps >= 320
+      ? 360
+      : targetFps >= 240
+      ? 240
+      : targetFps >= 180
+      ? 165
+      : targetFps >= 135
+      ? 144
+      : targetFps >= 110
+      ? 120
+      : 60;
 
-  // Include premium picks even if over budget for high-end GPUs
-  const premium = gpuScore >= 95;
-  const candidates = catalog.filter(m => premium || m.price <= limit * 1.25);
-
-  const scored = candidates
-    .map(m => {
-      const resMatch = m.resolution === target.resolution ? 1 : 0.4;
-      const refreshRatio = Math.min(m.refresh / target.refresh, 1.2);
-      const refreshMatch = refreshRatio >= 1 ? 1 : refreshRatio * 0.8;
-      const score = resMatch * 0.6 + refreshMatch * 0.4;
-      return { ...m, score };
-    })
-    .sort((a, b) => b.score - a.score || b.refresh - a.refresh || a.price - b.price)
+  const candidates = catalog
+    .filter(m => m.resolution === input.resolution)
+    .filter(m => m.refresh <= maxRefresh)
+    .filter(m => m.price <= budgetLimitVal)
+    .sort((a, b) => b.refresh - a.refresh || a.price - b.price)
     .slice(0, 3)
-    .map(m => ({
-      id: m.id,
-      name: m.name,
-      price: m.price,
-      reason: `${m.resolution} @ ${m.refresh}Hz pairs well with your GPU${premium ? ' (premium match)' : ''}`
-    }));
+    .map(m => {
+      const bullets = [
+        `Refresh target up to ${maxRefresh}Hz based on estimated FPS.`,
+        esportsGames.length ? 'Geared for esports pacing.' : 'Balanced for your selected titles.'
+      ];
+      if (m.notes) {
+        bullets.push(m.notes);
+      }
+      return {
+        id: m.id,
+        partType: 'MONITOR' as const,
+        name: m.name,
+        price: m.price,
+        qualitativeBullets: bullets.slice(0, 3),
+        notes: []
+      };
+    });
 
-  return scored;
+  return candidates;
 }
 
 export function analyzeSystem(input: AnalysisInput): AnalysisResult {
@@ -301,84 +625,51 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     throw new Error('Select at least one game.');
   }
 
-  const gpuScore = getGpuScore(gpu, input.resolution);
-  const ram = ramScore(input.ramAmount, input.ramSpeed);
-  const storage = storageScore(input.storageType);
-
-  const perGame = selectedGames.map(game => {
-    const quality: QualitySetting = game.type === 'esports' ? 'low' : 'ultra';
-    const curated =
-      lookupCuratedFps(gpu.id, game.id, input.resolution, quality) ??
-      lookupCuratedFps(gpu.id, game.id, input.resolution, 'ultra') ??
-      lookupCuratedFps(gpu.id, game.id, input.resolution, 'low');
-
-    const gpuCap =
-      curated !== null ? curated : fallbackGpuFps(relevantGpuScore(gpu, input.resolution), game, input, quality);
-    const cpuCap = estimateCpuCapFps(cpu.score, input, game, quality);
-
-    let limitation: 'CPU' | 'GPU' | 'MIXED' = 'MIXED';
-    if (cpuCap < gpuCap * 0.92) limitation = 'CPU';
-    else if (gpuCap < cpuCap * 0.92) limitation = 'GPU';
-
-    const cpuDeficit = cpuCap < gpuCap ? ((gpuCap - cpuCap) / gpuCap) * 100 : 0;
-    const gpuDeficit = gpuCap < cpuCap ? ((cpuCap - gpuCap) / cpuCap) * 100 : 0;
-    const confidence = clamp(55 + Math.min(40, Math.max(cpuDeficit, gpuDeficit)), 55, 95);
-
-    return {
-      game,
-      limitation,
-      cpuDeficit,
-      gpuDeficit,
-      confidence,
-      hasBenchmark: curated !== null
-    };
-  });
-
-  const cpuLimited = perGame.filter(g => g.limitation === 'CPU').length;
-  const gpuLimited = perGame.filter(g => g.limitation === 'GPU').length;
-  const mixed = perGame.length - cpuLimited - gpuLimited;
-
-  let verdictType: 'CPU' | 'GPU' | 'MIXED' = 'MIXED';
-  if (cpuLimited > gpuLimited && cpuLimited > mixed) verdictType = 'CPU';
-  else if (gpuLimited > cpuLimited && gpuLimited > mixed) verdictType = 'GPU';
-
-  const dominance = Math.max(cpuLimited, gpuLimited, mixed);
-  const confidence = verdictType === 'MIXED'
-    ? 60
-    : clamp(55 + (dominance / perGame.length) * 40, 55, 95);
+  const baselineAgg = aggregateMetrics(cpu, gpu, input, selectedGames);
+  const referenceMap: Record<string, FpsReference> = Object.fromEntries(
+    baselineAgg.perGame.map(g => [g.game.id, { fpsTypical: g.fpsTypical, gpuIndexValue: g.gpuIndexValue }])
+  );
 
   const reasons: string[] = [];
-  const benchmarked = perGame.filter(g => g.hasBenchmark).length;
-  if (verdictType === 'CPU') {
-    reasons.push(`${cpuLimited}/${perGame.length} games hit CPU limits first`);
-    if (input.refreshRate >= 144) reasons.push(`High refresh (${input.refreshRate}Hz) amplifies CPU demand`);
-    if (cpu.score < 70) reasons.push(`CPU score ${cpu.score} below recommended ${Math.round(perGame.length > 0 ? 70 : 0)}`);
-  } else if (verdictType === 'GPU') {
-    reasons.push(`${gpuLimited}/${perGame.length} games hit GPU limits first`);
-    if (input.resolution !== '1080p') reasons.push(`${input.resolution} shifts load toward GPU`);
-    if (gpuScore < requiredGpuScore(input.resolution)) reasons.push(`GPU score ${gpuScore} trails target ${requiredGpuScore(input.resolution)}`);
+  const headroomRatio = baselineAgg.headroomRatio;
+  if (baselineAgg.boundType === 'CPU_BOUND') {
+    reasons.push('Your CPU is the limiting factor for the selected titles.');
+    if (input.refreshRate >= 144) {
+      reasons.push(`High refresh (${input.refreshRate}Hz) increases CPU demand.`);
+    } else {
+      reasons.push('Upgrading the CPU should improve FPS until the GPU becomes limiting.');
+    }
+  } else if (baselineAgg.boundType === 'GPU_BOUND') {
+    reasons.push(`Your GPU is the limiting factor at ${input.resolution}.`);
+    if (input.resolution !== '1080p') {
+      reasons.push(`${input.resolution} shifts more work to the GPU.`);
+    } else {
+      reasons.push('Upgrading the GPU should significantly increase FPS.');
+    }
   } else {
-    reasons.push('Workload varies by title; neither component dominates');
-    reasons.push('Resolution and refresh tradeoffs balance CPU/GPU demand');
-    reasons.push('Fine-tuning settings may yield better returns than hardware');
-  }
-  if (benchmarked > 0 && benchmarked < perGame.length) {
-    reasons.push(`Benchmark coverage: ${benchmarked}/${perGame.length} games (others estimated)`);
+    reasons.push('CPU and GPU headroom are closely matched.');
+    reasons.push('Both upgrades yield smaller, incremental gains.');
+    reasons.push('Resolution and refresh tradeoffs balance the load.');
   }
 
-  const cpuDeficitAvg = perGame.reduce((s, g) => s + g.cpuDeficit, 0) / perGame.length;
-  const gpuDeficitAvg = perGame.reduce((s, g) => s + g.gpuDeficit, 0) / perGame.length;
-  const ramDeficit = clamp(72 - ram, 0, 60);
-  const storageDeficit = clamp(70 - storage, 0, 60);
+  if (baselineAgg.benchmarkCoverage > 0 && baselineAgg.benchmarkCoverage < 1) {
+    const count = Math.round(baselineAgg.benchmarkCoverage * selectedGames.length);
+    reasons.push(`Benchmark coverage: ${count}/${selectedGames.length} games (others estimated)`);
+  }
+
+  const cpuDeficit = headroomRatio < 1 ? (1 / headroomRatio - 1) * 100 : 0;
+  const gpuDeficit = headroomRatio > 1 ? (headroomRatio - 1) * 100 : 0;
+
+  const ramNeedScore = input.ramAmount < 12 ? 32 : input.ramAmount < 16 ? 22 : input.ramAmount < 32 ? 10 : 0;
+  const storageNeedScore = baselineAgg.stutterRiskAvg * 0.6;
 
   const upgrades = [
-    { category: 'CPU', priority: cpuDeficitAvg, reasonHint: cpuDeficitAvg > gpuDeficitAvg },
-    { category: 'GPU', priority: gpuDeficitAvg, reasonHint: gpuDeficitAvg > cpuDeficitAvg },
-    { category: 'RAM', priority: ramDeficit * (input.ramAmount < 16 ? 1.4 : 1) },
-    { category: 'Storage', priority: storageDeficit * 0.6 }
+    { category: 'CPU', priority: cpuDeficit },
+    { category: 'GPU', priority: gpuDeficit },
+    { category: 'RAM', priority: ramNeedScore },
+    { category: 'Storage', priority: storageNeedScore }
   ];
 
-  // Budget realism scaling
   const budgetScale =
     input.budgetBucket === '$0-100'
       ? 0.6
@@ -388,113 +679,202 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
       ? 1
       : input.budgetBucket === '$400-700'
       ? 1.1
-      : 1.2;
+      : input.budgetBucket === '$700-1200'
+      ? 1.2
+      : input.budgetBucket === '$1200-1600'
+      ? 1.25
+      : input.budgetBucket === '$1600-2000'
+      ? 1.3
+      : input.budgetBucket === '$2000-2500'
+      ? 1.35
+      : 1.4;
   upgrades.forEach(u => {
-    if (u.category === 'GPU' && input.resolution !== '1080p') u.priority *= 1.15;
-    if (u.category === 'CPU' && input.refreshRate >= 144) u.priority *= 1.1;
     u.priority *= budgetScale;
   });
 
   upgrades.sort((a, b) => b.priority - a.priority);
+
+  const recommendedParts: AnalysisResult['recommendedParts'] = [
+    { category: 'CPU', items: suggestParts('CPU', input, cpu, gpu, selectedGames, baselineAgg, referenceMap) },
+    { category: 'GPU', items: suggestParts('GPU', input, cpu, gpu, selectedGames, baselineAgg, referenceMap) },
+    { category: 'RAM', items: suggestRam(input, cpu) },
+    { category: 'Storage', items: suggestStorage(input) },
+    { category: 'Monitor', items: suggestMonitor(input, baselineAgg) }
+  ];
+
+  const estimateRange = (items: AnalysisResult['recommendedParts'][number]['items']) => {
+    const gains = items
+      .map(i => i.avgFpsGainPct)
+      .filter((v): v is number => typeof v === 'number' && v > 0)
+      .sort((a, b) => b - a);
+    if (gains.length === 0) return null;
+    const top = gains[0];
+    const next = gains[1];
+    if (next && next !== top) {
+      const min = Math.min(top, next);
+      const max = Math.max(top, next);
+      return `~+${min}-${max}%`;
+    }
+    return `~+${top}%`;
+  };
+
   const upgradePath = upgrades
-    .filter(u => u.priority > 8)
+    .filter(u => u.priority > 6)
     .map(u => {
       const reasons: string[] = [];
-      let estimatedImpact = '';
+      let impactSummary = '';
       if (u.category === 'CPU') {
-        estimatedImpact = cpu.score < 65 ? '+25-45% FPS (CPU-bound titles)' : '+10-20% FPS';
-        reasons.push('CPU deficits dominate several selected games');
-        if (input.refreshRate >= 144) reasons.push(`High refresh targets require faster CPU (${input.refreshRate}Hz)`);
-        reasons.push(`Aim for CPU score ~${Math.min(98, cpu.score + 20)}+`);
+        impactSummary =
+          baselineAgg.boundType === 'CPU_BOUND'
+            ? 'Modest avg FPS gains in CPU-limited titles'
+            : 'Better high-refresh headroom; modest avg FPS change';
+        reasons.push('CPU headroom trails GPU throughput.');
+        if (input.refreshRate >= 144) {
+          reasons.push(`High refresh targets benefit from faster CPU.`);
+        }
       } else if (u.category === 'GPU') {
-        estimatedImpact = gpuScore < 60 ? '+35-60% FPS (GPU-bound)' : '+15-35% FPS';
-        reasons.push(`${input.resolution} pushes GPU harder than CPU`);
-        if (selectedGames.some(g => g.vramHeavy) && gpu.vram < 12)
-          reasons.push('Several titles prefer 12GB+ VRAM');
-        reasons.push(`Aim for GPU tier built for ${input.resolution}`);
+        const gpuRange = estimateRange(recommendedParts.find(p => p.category === 'GPU')?.items ?? []);
+        impactSummary = gpuRange
+          ? `Estimated avg FPS gain: ${gpuRange}`
+          : 'Estimated avg FPS gain varies by title.';
+        reasons.push('GPU is the dominant limiter for your selection.');
+        if (selectedGames.some(g => g.vramHeaviness === 'HIGH') && gpu.vram < 8) {
+          reasons.push('Some modern games can exceed 6GB VRAM at high textures; 8GB helps at 1080p.');
+        }
       } else if (u.category === 'RAM') {
-        estimatedImpact = input.ramAmount < 12 ? '+10-20% stability' : '+5-10% 1% lows';
-        if (input.ramAmount < 16) reasons.push('16GB is modern baseline; under-provisioned today');
-        if (!input.ramSpeed.includes('DDR5') && !input.ramSpeed.includes('3600'))
-          reasons.push('Faster RAM helps CPU-limited scenarios');
+        impactSummary = 'Improves stability in modern titles; small avg FPS change';
+        if (input.ramAmount < 16) {
+          reasons.push('16GB is the current baseline for modern titles.');
+        } else {
+          reasons.push('More RAM reduces paging in heavy scenes.');
+        }
       } else if (u.category === 'Storage') {
-        estimatedImpact = 'Faster loads + snappier feel';
-        if (input.storageType === 'HDD') reasons.push('HDD is slow for modern titles; NVMe is 5-10x faster');
-        reasons.push('Minimal FPS uplift; quality-of-life upgrade');
+        impactSummary = 'Faster loads + less traversal hitching';
+        if (input.storageType === 'HDD') {
+          reasons.push('HDDs increase traversal stutter in streaming-heavy games.');
+        } else {
+          reasons.push('NVMe mainly improves load times and installs.');
+        }
       }
       return {
         category: u.category,
-        priority: Math.round(u.priority),
-        estimatedImpact,
+        impactSummary,
         reasons
       };
     });
 
-  const best = upgradePath[0] ?? {
+  const gpuPickItems = recommendedParts.find(p => p.category === 'GPU')?.items ?? [];
+  const gpuChoiceOptions =
+    gpuPickItems.length > 0
+      ? gpuPickItems.map(item => ({
+          label: item.label ?? 'Pick',
+          name: item.name,
+          price: item.price,
+          impactSummary: item.avgFpsGainPct
+            ? `${item.estimated ? 'Estimated ' : ''}~+${item.avgFpsGainPct}% avg FPS`
+            : 'Estimated impact (limited data)',
+          estimated: item.estimated ?? item.avgFpsGainPct === undefined
+        }))
+      : null;
+  const groupsWithItems = recommendedParts.filter(group => group.items.length > 0);
+  const topCategory = upgradePath[0]?.category;
+  const bestGroup =
+    (topCategory && groupsWithItems.find(g => g.category === topCategory)) ||
+    groupsWithItems.find(g => g.category === 'GPU') ||
+    groupsWithItems[0];
+  const bestItems = bestGroup?.items ?? [];
+  let bestValue = {
     category: 'No major upgrade needed',
-    priority: 0,
-    estimatedImpact: 'System balanced for chosen titles',
-    reasons: ['Tweaking settings may be higher ROI than hardware changes']
+    impactSummary: 'System balanced for chosen titles',
+    reasons: ['Adjusting settings may yield better returns than new hardware']
   };
 
+  if (bestGroup && bestItems.length > 0) {
+    const sorted =
+      bestGroup.category === 'GPU'
+        ? [...bestItems].sort((a, b) => (b.avgFpsGainPct ?? 0) - (a.avgFpsGainPct ?? 0))
+        : [...bestItems];
+    const valuePick =
+      bestGroup.category === 'GPU'
+        ? bestItems.find(item => (item.label ?? '').toLowerCase() === 'best value')
+        : undefined;
+    const top = valuePick ?? sorted[0];
+    const range = bestGroup.category === 'GPU' ? estimateRange(bestItems) : null;
+    const reasons: string[] = [];
+    let impactSummary = '';
+
+    if (bestGroup.category === 'GPU') {
+      impactSummary = range ? `Estimated avg FPS gain: ${range}` : 'Estimated avg FPS gain varies by title.';
+      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+      reasons.push(
+        baselineAgg.boundType === 'GPU_BOUND'
+          ? 'GPU is the main limiter for your selected games.'
+          : 'GPU gains are strong while CPU headroom remains.'
+      );
+      if (top.qualitativeBullets[0]) reasons.push(top.qualitativeBullets[0]);
+    } else if (bestGroup.category === 'CPU') {
+      impactSummary =
+        baselineAgg.boundType === 'CPU_BOUND'
+          ? 'Modest avg FPS gains in CPU-limited titles'
+          : 'Better high-refresh headroom; modest avg FPS change';
+      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+      reasons.push('CPU upgrades help most when targeting high refresh or esports titles.');
+    } else if (bestGroup.category === 'RAM') {
+      impactSummary = 'Improves stability in modern titles; small avg FPS change';
+      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+      reasons.push('More RAM reduces paging in memory-heavy scenes.');
+    } else if (bestGroup.category === 'Storage') {
+      impactSummary = 'Faster loads + less traversal hitching';
+      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+      reasons.push('SSD upgrades are the most noticeable quality-of-life change.');
+    } else if (bestGroup.category === 'Monitor') {
+      impactSummary = 'Matches estimated FPS ceiling for consistent output';
+      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+      reasons.push('Higher refresh only helps when FPS can sustain it.');
+    }
+
+    bestValue = {
+      category: bestGroup.category,
+      impactSummary,
+      reasons: reasons.slice(0, 3),
+      options: gpuChoiceOptions ?? undefined
+    };
+  }
+
   const warnings: string[] = [];
-  if (gpu.vram < 8 && selectedGames.some(g => g.vramHeavy)) {
-    warnings.push('VRAM under 8GB may force lower textures in VRAM-heavy games.');
+  if (baselineAgg.vramPressureAvg >= 60) {
+    warnings.push('Some modern games can exceed 6GB VRAM at high textures; 8GB helps at 1080p.');
   }
-  if (gpuScore > 88 && input.resolution === '1080p' && input.refreshRate <= 120) {
-    warnings.push('GPU headroom unused at 1080p/120Hz; consider higher refresh or 1440p.');
-  }
-  if (cpu.score > 85 && gpuScore < 60) {
-    warnings.push('Strong CPU + modest GPU; GPU upgrade is best value.');
-  }
-  if (gpuScore > 85 && cpu.score < 65) {
-    warnings.push('GPU outpaces CPU; CPU upgrade unlocks more frames.');
+  if (baselineAgg.stutterRiskAvg > 60 && input.storageType === 'HDD') {
+    warnings.push('HDDs increase traversal stutter in streaming-heavy games; SSD recommended.');
   }
   if (input.ramAmount === 8) {
     warnings.push('8GB RAM is below recommended; expect stutter in modern titles.');
   }
-  if (input.storageType === 'HDD') {
-    warnings.push('HDD bottlenecks load times; SSD recommended.');
+  if (input.resolution === '4K' && getGpuScore(gpu, input.resolution) < 70) {
+    warnings.push('4K gaming is demanding; consider 1440p for more consistent frame rates.');
   }
   if (input.budgetBucket === '$0-100') {
     warnings.push('Under $100: focus on RAM/SSD or save for a larger jump.');
   }
-  if (input.resolution === '4K' && gpuScore < 80) {
-    warnings.push('4K gaming wants top-tier GPUs; consider 1440p for better smoothness.');
-  }
-
-  const recommendedParts: AnalysisResult['recommendedParts'] = [
-    { category: 'CPU', items: suggestParts('CPU', input, cpu, gpu, selectedGames) },
-    { category: 'GPU', items: suggestParts('GPU', input, cpu, gpu, selectedGames) },
-    { category: 'RAM', items: suggestRam(input) },
-    { category: 'Storage', items: suggestStorage(input) },
-    { category: 'Monitor', items: suggestMonitor(input, gpu) }
-  ];
-
-  // Motherboard/RAM warning if any CPU recommendation changes socket or memory type
-  const cpuRecs = recommendedParts[0]?.items ?? [];
-  const needsBoard = cpuRecs.some(item => {
-    const note = (item as any).compatibilityNote as string | undefined;
-    return typeof note === 'string' ? note.toLowerCase().includes('motherboard') : false;
-  });
-  const needsRam = cpuRecs.some(item => {
-    const note = (item as any).compatibilityNote as string | undefined;
-    return typeof note === 'string' ? note.toLowerCase().includes('ddr') : false;
-  });
-  if (needsBoard) warnings.push('CPU upgrade picks require a new motherboard (socket change).');
-  if (needsRam) warnings.push('CPU upgrade picks may need DDR5 RAM and a matching board.');
 
   return {
     verdict: {
-      type: verdictType,
-      confidence: Math.round(confidence),
+      boundType: baselineAgg.boundType,
+      confidence: Number(baselineAgg.confidence.toFixed(2)),
+      headroomRatio: Number(headroomRatio.toFixed(2)),
       reasons: reasons.slice(0, 3),
-      games: perGame.map(g => ({ name: g.game.name, limitation: g.limitation }))
+      games: baselineAgg.perGame.map(g => ({
+        name: g.game.name,
+        boundType: g.boundType,
+        headroomRatio: Number(g.headroomRatio.toFixed(2))
+      }))
     },
     bestValue: {
-      category: best.category,
-      estimatedImpact: best.estimatedImpact,
-      reasons: best.reasons.slice(0, 3)
+      category: bestValue.category,
+      impactSummary: bestValue.impactSummary,
+      reasons: bestValue.reasons.slice(0, 3),
+      options: bestValue.options
     },
     upgradePath,
     recommendedParts,

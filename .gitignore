@@ -5,3 +5,5 @@ node_modules/
 
 # Large raw benchmark dump (keep curated version tracked instead)
 data/gpu_fps.json
+data/GPUdataset.json
+data/gpu_fps_curated.generated.json

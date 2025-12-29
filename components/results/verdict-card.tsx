@@ -2,25 +2,33 @@ import { AnalysisResult } from '@/lib/types';
 
 export function VerdictCard({ verdict }: { verdict: AnalysisResult['verdict'] }) {
   const border =
-    verdict.type === 'CPU' ? 'border-orange-500' : verdict.type === 'GPU' ? 'border-purple-500' : 'border-brand-500';
+    verdict.boundType === 'CPU_BOUND'
+      ? 'border-warning-500'
+      : verdict.boundType === 'GPU_BOUND'
+      ? 'border-danger-500'
+      : 'border-brand-500';
 
   const gameSummary = verdict.games ?? [];
-  const cpuGames = gameSummary.filter(g => g.limitation === 'CPU');
-  const gpuGames = gameSummary.filter(g => g.limitation === 'GPU');
-  const mixedGames = gameSummary.filter(g => g.limitation === 'MIXED');
+  const cpuGames = gameSummary.filter(g => g.boundType === 'CPU_BOUND');
+  const gpuGames = gameSummary.filter(g => g.boundType === 'GPU_BOUND');
+  const mixedGames = gameSummary.filter(g => g.boundType === 'MIXED');
 
   return (
-    <div className={`bg-white dark:bg-slate-900 rounded-xl shadow-lg p-6 border-l-4 ${border}`}>
+    <div className={`bg-white dark:bg-surface rounded-xl shadow-lg p-6 border-l-4 ${border}`}>
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50 mb-1">Bottleneck Verdict</h3>
           <p className="text-3xl font-bold text-slate-900 dark:text-slate-50">
-            {verdict.type === 'CPU' ? 'Mostly CPU-limited' : verdict.type === 'GPU' ? 'Mostly GPU-limited' : 'Mixed'}
+            {verdict.boundType === 'CPU_BOUND'
+              ? 'Mostly CPU-limited'
+              : verdict.boundType === 'GPU_BOUND'
+              ? 'Mostly GPU-limited'
+              : 'Mixed'}
           </p>
         </div>
         <div className="text-right">
-          <div className="text-sm text-slate-500">Confidence</div>
-          <div className="text-2xl font-bold text-brand-600">{verdict.confidence}%</div>
+          <div className="text-sm text-slate-500 dark:text-muted">Confidence</div>
+          <div className="text-2xl font-bold text-brand-600">{Math.round(verdict.confidence * 100)}%</div>
         </div>
       </div>
       <div className="space-y-2">

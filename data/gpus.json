@@ -1,7 +1,7 @@
 [
   { "id": "gtx1650", "name": "NVIDIA GTX 1650", "score1080": 45, "score1440": 25, "score4k": 12, "vram": 4, "price": 140 },
-  { "id": "gtx1660s", "name": "NVIDIA GTX 1660 Super", "score1080": 58, "score1440": 38, "score4k": 20, "vram": 6, "price": 190 },
-  { "id": "rtx2060", "name": "NVIDIA RTX 2060", "score1080": 62, "score1440": 44, "score4k": 26, "vram": 6, "price": 240 },
+  { "id": "gtx1660s", "name": "NVIDIA GTX 1660 Super", "score1080": 56, "score1440": 36, "score4k": 19, "vram": 6, "price": 190 },
+  { "id": "rtx2060", "name": "NVIDIA RTX 2060", "score1080": 59, "score1440": 41, "score4k": 25, "vram": 6, "price": 240 },
   { "id": "rtx3050", "name": "NVIDIA RTX 3050", "score1080": 52, "score1440": 32, "score4k": 18, "vram": 8, "price": 230 },
   { "id": "rtx3060", "name": "NVIDIA RTX 3060", "score1080": 68, "score1440": 50, "score4k": 30, "vram": 12, "price": 280 },
   { "id": "rtx3060ti", "name": "NVIDIA RTX 3060 Ti", "score1080": 78, "score1440": 62, "score4k": 40, "vram": 8, "price": 330 },
@@ -14,13 +14,13 @@
   { "id": "rtx4070", "name": "NVIDIA RTX 4070", "score1080": 66, "score1440": 58, "score4k": 37, "vram": 12, "price": 550 },
   { "id": "rtx4070super", "name": "NVIDIA RTX 4070 Super", "score1080": 74, "score1440": 67, "score4k": 43, "vram": 12, "price": 600 },
   { "id": "rtx4070ti", "name": "NVIDIA RTX 4070 Ti", "score1080": 79, "score1440": 71, "score4k": 47, "vram": 12, "price": 700 },
-  { "id": "rtx4080", "name": "NVIDIA RTX 4080", "score1080": 88, "score1440": 82, "score4k": 59, "vram": 16, "price": 950 },
-  { "id": "rtx4080super", "name": "NVIDIA RTX 4080 Super", "score1080": 90, "score1440": 83, "score4k": 61, "vram": 16, "price": 999 },
-  { "id": "rtx4090", "name": "NVIDIA RTX 4090", "score1080": 95, "score1440": 88, "score4k": 80, "vram": 24, "price": 1599 },
+  { "id": "rtx4080", "name": "NVIDIA RTX 4080", "score1080": 88, "score1440": 82, "score4k": 59, "vram": 16, "price": 999 },
+  { "id": "rtx4080super", "name": "NVIDIA RTX 4080 Super", "score1080": 90, "score1440": 83, "score4k": 61, "vram": 16, "price": 1099 },
+  { "id": "rtx4090", "name": "NVIDIA RTX 4090", "score1080": 95, "score1440": 88, "score4k": 80, "vram": 24, "price": 1699 },
   { "id": "rtx5070", "name": "NVIDIA RTX 5070", "score1080": 75, "score1440": 68, "score4k": 45, "vram": 12, "price": 520 },
-  { "id": "rtx5080", "name": "NVIDIA RTX 5080", "score1080": 85, "score1440": 78, "score4k": 67, "vram": 16, "price": 1100 },
-  { "id": "rtx5090", "name": "NVIDIA RTX 5090", "score1080": 100, "score1440": 100, "score4k": 100, "vram": 24, "price": 1800 },
-  { "id": "rx6600", "name": "AMD RX 6600", "score1080": 62, "score1440": 44, "score4k": 26, "vram": 8, "price": 220 },
+  { "id": "rtx5080", "name": "NVIDIA RTX 5080", "score1080": 85, "score1440": 78, "score4k": 67, "vram": 16, "price": 1299 },
+  { "id": "rtx5090", "name": "NVIDIA RTX 5090", "score1080": 100, "score1440": 100, "score4k": 100, "vram": 24, "price": 2499 },
+  { "id": "rx6600", "name": "AMD RX 6600", "score1080": 64, "score1440": 46, "score4k": 28, "vram": 8, "price": 220 },
   { "id": "rx6650xt", "name": "AMD RX 6650 XT", "score1080": 68, "score1440": 50, "score4k": 30, "vram": 8, "price": 260 },
   { "id": "rx6700xt", "name": "AMD RX 6700 XT", "score1080": 80, "score1440": 66, "score4k": 44, "vram": 12, "price": 360 },
   { "id": "rx6750xt", "name": "AMD RX 6750 XT", "score1080": 83, "score1440": 68, "score4k": 46, "vram": 12, "price": 420 },
@@ -30,6 +30,6 @@
   { "id": "rx7600", "name": "AMD RX 7600", "score1080": 66, "score1440": 48, "score4k": 28, "vram": 8, "price": 270 },
   { "id": "rx7700xt", "name": "AMD RX 7700 XT", "score1080": 82, "score1440": 68, "score4k": 48, "vram": 12, "price": 430 },
   { "id": "rx7800xt", "name": "AMD RX 7800 XT", "score1080": 90, "score1440": 78, "score4k": 60, "vram": 16, "price": 550 },
-  { "id": "rx7900xtx", "name": "AMD RX 7900 XTX", "score1080": 98, "score1440": 92, "score4k": 80, "vram": 24, "price": 950 },
-  { "id": "rx8800xt", "name": "AMD RX 8800 XT", "score1080": 102, "score1440": 98, "score4k": 90, "vram": 20, "price": 1100 }
+  { "id": "rx7900xtx", "name": "AMD RX 7900 XTX", "score1080": 98, "score1440": 92, "score4k": 80, "vram": 24, "price": 999 },
+  { "id": "rx8800xt", "name": "AMD RX 8800 XT", "score1080": 99, "score1440": 95, "score4k": 88, "vram": 20, "price": 1249 }
 ]

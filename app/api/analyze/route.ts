@@ -12,7 +12,17 @@ const schema = z.object({
   resolution: z.enum(['1080p', '1440p', '4K']),
   refreshRate: z.number().int(),
   games: z.array(z.string()).min(1),
-  budgetBucket: z.enum(['$0-100', '$100-250', '$250-400', '$400-700', '$700-1200', '$1200+'])
+  budgetBucket: z.enum([
+    '$0-100',
+    '$100-250',
+    '$250-400',
+    '$400-700',
+    '$700-1200',
+    '$1200-1600',
+    '$1600-2000',
+    '$2000-2500',
+    '$2500+'
+  ])
 });
 
 export async function POST(req: Request) {
