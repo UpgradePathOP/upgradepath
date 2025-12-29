@@ -14,6 +14,7 @@ import {
   Gpu,
   Heaviness,
   Monitor,
+  PartPick,
   Resolution,
   StorageType,
   TypicalBound
@@ -348,7 +349,7 @@ function suggestParts(
   gamesProfiles: GameProfile[],
   baseline: AggregateMetrics,
   referenceMap: Record<string, FpsReference>
-) {
+): PartPick[] {
   const limit = budgetLimit[input.budgetBucket];
   const targetGain = category === 'CPU' ? 6 : 8;
 
@@ -452,7 +453,7 @@ function suggestParts(
   const labelOrder = ['Best value', 'Best performance', 'Balanced'];
   picks.sort((a, b) => labelOrder.indexOf(a.label) - labelOrder.indexOf(b.label));
 
-  return picks.map(({ label, candidate }) => {
+  return picks.map(({ label, candidate }): PartPick => {
     const g = candidate.gpu;
     const isUnvalidated = !candidate.isCuratedGpu;
     const avgFpsGainPct = candidate.isCuratedGpu ? candidate.avgGain : undefined;
@@ -493,7 +494,7 @@ function suggestParts(
   });
 }
 
-function suggestRam(input: AnalysisInput, cpu: Cpu) {
+function suggestRam(input: AnalysisInput, cpu: Cpu): PartPick[] {
   const kits = [
     { id: 'ram-16-3200', name: '16GB (2x8) DDR4-3200', price: 50, capacity: 16, type: 'DDR4' as const },
     { id: 'ram-32-3600', name: '32GB (2x16) DDR4-3600', price: 90, capacity: 32, type: 'DDR4' as const },
@@ -506,7 +507,7 @@ function suggestRam(input: AnalysisInput, cpu: Cpu) {
     .filter(k => k.type === cpu.memoryType)
     .filter(k => k.price <= budgetLimitVal)
     .slice(0, 2);
-  return matches.map(k => {
+    return matches.map((k): PartPick => {
     const bullets: string[] = [];
     if (input.ramAmount < 16 && k.capacity >= 16) {
       bullets.push('Reaches the 16GB baseline for modern titles.');
@@ -528,7 +529,7 @@ function suggestRam(input: AnalysisInput, cpu: Cpu) {
   });
 }
 
-function suggestStorage(input: AnalysisInput) {
+function suggestStorage(input: AnalysisInput): PartPick[] {
   const options = [
     { id: 'ssd-sata-1tb', name: '1TB SATA SSD', price: 55, type: 'SATA SSD' as StorageType },
     { id: 'ssd-nvme-1tb', name: '1TB NVMe Gen3', price: 75, type: 'NVMe' as StorageType },
@@ -542,7 +543,7 @@ function suggestStorage(input: AnalysisInput) {
       ? options.filter(o => o.type === 'NVMe')
       : [];
   const picks = baseOptions.filter(o => o.price <= budgetLimitVal).slice(0, 2);
-  return picks.map(o => {
+  return picks.map((o): PartPick => {
     const fromHdd = input.storageType === 'HDD';
     const bullets: string[] = [];
     if (fromHdd) {
@@ -563,7 +564,7 @@ function suggestStorage(input: AnalysisInput) {
   });
 }
 
-function suggestMonitor(input: AnalysisInput, aggregate: AggregateMetrics) {
+function suggestMonitor(input: AnalysisInput, aggregate: AggregateMetrics): PartPick[] {
   const catalog = monitors as Monitor[];
   const esportsGames = aggregate.perGame.filter(g => g.category === 'ESPORTS');
   const esportsAvg = esportsGames.length
@@ -592,7 +593,7 @@ function suggestMonitor(input: AnalysisInput, aggregate: AggregateMetrics) {
     .filter(m => m.price <= budgetLimitVal)
     .sort((a, b) => b.refresh - a.refresh || a.price - b.price)
     .slice(0, 3)
-    .map(m => {
+    .map((m): PartPick => {
       const bullets = [
         `Refresh target up to ${maxRefresh}Hz based on estimated FPS.`,
         esportsGames.length ? 'Geared for esports pacing.' : 'Balanced for your selected titles.'
