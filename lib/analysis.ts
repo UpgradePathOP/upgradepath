@@ -555,22 +555,18 @@ function suggestParts(
     });
   }
 
-  const rawCurrentGpuScore = getGpuScore(gpu, input.resolution);
-  const currentGpuScore = Number.isFinite(rawCurrentGpuScore) ? rawCurrentGpuScore : 0;
   const gpuHeavyCount = gamesProfiles.filter(g => resolveTypicalBound(g) === 'GPU_HEAVY').length;
-  const baseList = (gpus as Gpu[]).filter(g => g.price <= limit);
-  let filtered = baseList.filter(g => getGpuScore(g, input.resolution) > currentGpuScore + targetGain);
-  if (filtered.length === 0) {
-    filtered = baseList.filter(g => g.id !== gpu.id);
-  }
-  const candidates = filtered.map(g => {
+  const baseList = (gpus as Gpu[]).filter(g => g.price <= limit && g.id !== gpu.id);
+  const candidates = baseList.map(g => {
     const candidateAgg = aggregateMetrics(cpu, g, input, gamesProfiles, referenceMap);
-    let avgGain = Math.max(0, Math.round(calcAvgFpsGainPct(baseline, candidateAgg)));
+    const rawAvgGain = calcAvgFpsGainPct(baseline, candidateAgg);
+    let avgGain = Math.max(0, Math.round(rawAvgGain));
     if (baseline.targetLimitedShare > 0.5 && input.refreshRate >= 144) {
       avgGain = Math.min(Math.round(avgGain * 0.6), 80);
     }
-    const utilityGain = Math.max(0, Math.round(calcUtilityGainPct(baseline, candidateAgg)));
-    const rawScore = getGpuScore(g, input.resolution);
+    const rawUtilityGain = calcUtilityGainPct(baseline, candidateAgg);
+    const utilityGain = Math.max(0, Math.round(rawUtilityGain));
+    const rawScore = candidateAgg.fpsTypicalAvg;
     const confidence: PartPick['confidence'] =
       candidateAgg.curatedCount === gamesProfiles.length
         ? 'confirmed'
@@ -583,6 +579,8 @@ function suggestParts(
       gpu: g,
       avgGain,
       utilityGain,
+      rawAvgGain,
+      rawUtilityGain,
       rawScore,
       estimated,
       confidence,
@@ -593,11 +591,13 @@ function suggestParts(
     };
   });
 
-  if (candidates.length === 0) return [];
+  const improving = candidates.filter(c => c.rawAvgGain > 1);
+  const usable = improving.length ? improving : [];
+  if (usable.length === 0) return [];
 
-  const byValue = [...candidates].sort((a, b) => b.valueScore - a.valueScore);
-  const byPerf = [...candidates].sort((a, b) => b.rawScore - a.rawScore || b.avgGain - a.avgGain);
-  const byBalanced = [...candidates].sort((a, b) => b.balanceScore - a.balanceScore);
+  const byValue = [...usable].sort((a, b) => b.valueScore - a.valueScore);
+  const byPerf = [...usable].sort((a, b) => b.rawScore - a.rawScore || b.avgGain - a.avgGain);
+  const byBalanced = [...usable].sort((a, b) => b.balanceScore - a.balanceScore);
 
   const used = new Set<string>();
   const pickUnique = (list: typeof candidates) => list.find(item => !used.has(item.gpu.id)) ?? list[0];
