@@ -20,15 +20,26 @@ export function VerdictCard({ verdict }: { verdict: AnalysisResult['verdict'] })
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50 mb-1">Bottleneck Verdict</h3>
-          <p className="text-3xl font-bold text-slate-900 dark:text-slate-50">
-            {verdict.boundType === 'CPU_BOUND'
-              ? 'Mostly CPU-limited'
-              : verdict.boundType === 'GPU_BOUND'
-              ? 'Mostly GPU-limited'
-              : verdict.boundType === 'TARGET_LIMITED'
-              ? 'Target-limited'
-              : 'Mixed'}
-          </p>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <p className="text-3xl font-bold text-slate-900 dark:text-slate-50">
+              {verdict.boundType === 'CPU_BOUND'
+                ? 'Mostly CPU-limited'
+                : verdict.boundType === 'GPU_BOUND'
+                ? 'Mostly GPU-limited'
+                : verdict.boundType === 'TARGET_LIMITED'
+                ? 'Target-limited'
+                : 'Mixed'}
+            </p>
+            <p className="text-sm text-slate-500 dark:text-muted">
+              {verdict.boundType === 'CPU_BOUND'
+                ? 'CPU is the main limiter'
+                : verdict.boundType === 'GPU_BOUND'
+                ? 'GPU is the main limiter'
+                : verdict.boundType === 'TARGET_LIMITED'
+                ? 'Refresh target above expected FPS'
+                : 'CPU/GPU are closely matched'}
+            </p>
+          </div>
         </div>
         <div className="text-right">
           <div className="text-sm text-slate-500 dark:text-muted">Confidence</div>
