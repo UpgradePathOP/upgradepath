@@ -63,6 +63,15 @@ const RES_DEMAND: Record<Resolution, number> = {
   '4K': 2.2
 };
 
+const RELATIVE_GPU_BASELINE = 'rtx4090';
+const RELATIVE_GPU_PERF: Record<string, number> = {
+  rtx4090: 1.0,
+  rtx5080: 1.1,
+  rtx5090: 1.35,
+  rx7900xtx: 0.95,
+  rx8800xt: 1.2
+};
+
 const ENGINE_SOFT_CEILING: Record<GameCategory, number> = {
   ESPORTS: 600,
   AAA: 220,
@@ -114,6 +123,19 @@ const cpuCeilingScale = (score: number) => 0.6 + 0.5 * Math.pow(score / 100, 0.7
 const applySoftCap = (fps: number, ceiling: number) => {
   if (!Number.isFinite(fps) || !Number.isFinite(ceiling) || ceiling <= 0) return fps;
   return ceiling * (1 - Math.exp(-fps / ceiling));
+};
+
+const gpuPerfIndex = (gpu: Gpu, resolution: Resolution) => {
+  const relative = RELATIVE_GPU_PERF[gpu.id];
+  const baseline = RELATIVE_GPU_PERF[RELATIVE_GPU_BASELINE] ?? 1;
+  const baselineGpu = GPU_MAP[RELATIVE_GPU_BASELINE];
+  if (relative && baselineGpu) {
+    const baseIndex = gpuIndex(getGpuScore(baselineGpu, resolution));
+    if (Number.isFinite(baseIndex) && baseIndex > 0) {
+      return baseIndex * (relative / baseline);
+    }
+  }
+  return gpuIndex(getGpuScore(gpu, resolution));
 };
 
 const resolveCategory = (game: GameProfile): GameCategory => {
@@ -232,7 +254,7 @@ function buildCuratedAnchors() {
       Object.entries(byGpu).forEach(([gpuId, gamesMap]) => {
         const gpu = GPU_MAP[gpuId];
         if (!gpu || !gamesMap) return;
-        const indexValue = gpuIndex(getGpuScore(gpu, resolution));
+        const indexValue = gpuPerfIndex(gpu, resolution);
         if (!Number.isFinite(indexValue) || indexValue <= 0) return;
         Object.entries(gamesMap).forEach(([gameId, fps]) => {
           if (typeof fps !== 'number' || !Number.isFinite(fps)) return;
@@ -267,7 +289,7 @@ function estimateFpsFromAnchors(
   if (!anchors || anchors.length === 0) return null;
   const gpu = GPU_MAP[gpuId];
   if (!gpu) return null;
-  const targetIndex = gpuIndex(getGpuScore(gpu, resolution));
+  const targetIndex = gpuPerfIndex(gpu, resolution);
   if (!Number.isFinite(targetIndex) || targetIndex <= 0) return null;
 
   let best = anchors[0];
@@ -341,18 +363,18 @@ function computeGameMetrics(
   const weights = resolveWeights(game);
 
   const gpuScore = getGpuScore(gpu, input.resolution);
+  const rawGpuIndex = gpuPerfIndex(gpu, input.resolution);
   const gpuIndexValue =
-    gpuIndex(gpuScore) /
-    (RES_DEMAND[input.resolution] * (0.6 + weights.gpu) * (typicalBound === 'GPU_HEAVY' ? 1.08 : 1));
+    rawGpuIndex / (RES_DEMAND[input.resolution] * (0.6 + weights.gpu) * (typicalBound === 'GPU_HEAVY' ? 1.08 : 1));
 
   const quality: QualitySetting = category === 'ESPORTS' ? 'low' : 'ultra';
   const sample = lookupFpsSample(gpu.id, game.id, input.resolution, quality);
   const baseFps = CATEGORY_BASE_FPS[category] * RES_SCALE[input.resolution];
-  let gpuFps = sample?.fps ?? baseFps * gpuIndex(getGpuScore(gpu, input.resolution));
+  let gpuFps = sample?.fps ?? baseFps * rawGpuIndex;
   let benchmarkSource: FpsSource = sample?.source ?? 'model';
 
   if (!sample && reference && reference.gpuIndexValue > 0 && Number.isFinite(reference.fpsTypical)) {
-    const ratio = gpuIndex(getGpuScore(gpu, input.resolution)) / reference.gpuIndexValue;
+    const ratio = rawGpuIndex / reference.gpuIndexValue;
     gpuFps = reference.fpsTypical * ratio;
     benchmarkSource = 'estimated';
   }
@@ -397,7 +419,7 @@ function computeGameMetrics(
     stutterRisk,
     vramPressure,
     benchmarkSource,
-    gpuIndexValue: gpuIndex(getGpuScore(gpu, input.resolution))
+    gpuIndexValue: rawGpuIndex
   };
 }
 
