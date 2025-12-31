@@ -600,7 +600,7 @@ function suggestParts(
   const byBalanced = [...usable].sort((a, b) => b.balanceScore - a.balanceScore);
 
   const used = new Set<string>();
-  const pickUnique = (list: typeof candidates) => list.find(item => !used.has(item.gpu.id)) ?? list[0];
+  const pickUnique = (list: typeof candidates) => list.find(item => !used.has(item.gpu.id));
   const picks: Array<{ label: string; candidate: (typeof candidates)[number] }> = [];
   const addPick = (label: string, list: typeof candidates) => {
     const pick = pickUnique(list);
@@ -831,7 +831,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     reasons.push(
       `Your ${input.refreshRate}Hz target is above expected FPS for most selected titles at ${input.resolution}.`
     );
-    reasons.push('Even with top-tier GPUs, reaching that refresh in these games is unlikely.');
+    reasons.push('At very high refresh targets, CPU/engine limits matter as much as GPU power.');
     reasons.push('Expect diminishing returns at this display target.');
   } else if (baselineAgg.boundType === 'CPU_BOUND') {
     reasons.push('Your CPU is the limiting factor for the selected titles.');
@@ -914,14 +914,12 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
       .filter((v): v is number => typeof v === 'number' && v > 0)
       .sort((a, b) => b - a);
     if (gains.length === 0) return null;
-    const top = gains[0];
-    const next = gains[1];
-    if (next && next !== top) {
-      const min = Math.min(top, next);
-      const max = Math.max(top, next);
+    const min = Math.min(...gains);
+    const max = Math.max(...gains);
+    if (min !== max) {
       return `~+${min}-${max}%`;
     }
-    return `~+${top}%`;
+    return `~+${max}%`;
   };
 
   const upgradePath = upgrades
@@ -1019,7 +1017,11 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     let impactSummary = '';
 
     if (bestGroup.category === 'GPU') {
-      impactSummary = range ? `Estimated avg FPS gain: ${range}` : 'Estimated avg FPS gain varies by title.';
+      if (top.avgFpsGainPct) {
+        impactSummary = `Estimated avg FPS gain: ~+${top.avgFpsGainPct}%`;
+      } else {
+        impactSummary = range ? `Estimated avg FPS gain: ${range}` : 'Estimated avg FPS gain varies by title.';
+      }
       reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
       reasons.push(
         verdictBoundType === 'TARGET_LIMITED'
