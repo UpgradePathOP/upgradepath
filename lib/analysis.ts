@@ -181,9 +181,114 @@ type CuratedFps = {
 const CURATED_FPS = gpuFpsCurated as unknown as CuratedFps;
 const CURATED_GPU_IDS = new Set(Object.keys(CURATED_FPS?.gpus ?? {}));
 
+type FpsSource = 'curated' | 'estimated' | 'model';
+type FpsSample = { fps: number; source: FpsSource };
+type AnchorEntry = { gpuId: string; fps: number; gpuIndexValue: number };
+
+const ESTIMATE_RATIO_MIN = 0.55;
+const ESTIMATE_RATIO_MAX = 2.2;
+const ESTIMATE_RATIO_EXP = 0.92;
+
 function lookupCuratedFps(gpuId: string, gameId: string, resolution: Resolution, quality: QualitySetting) {
   const fps = CURATED_FPS?.fps?.[quality]?.[resolution]?.[gpuId]?.[gameId];
   return typeof fps === 'number' ? fps : null;
+}
+
+const CURATED_ANCHORS = buildCuratedAnchors();
+
+function buildCuratedAnchors() {
+  const emptyResolutionMap = (): Record<Resolution, Record<string, AnchorEntry[]>> => ({
+    '1080p': {},
+    '1440p': {},
+    '4K': {}
+  });
+  const anchors: Record<QualitySetting, Record<Resolution, Record<string, AnchorEntry[]>>> = {
+    ultra: emptyResolutionMap(),
+    low: emptyResolutionMap()
+  };
+
+  const fpsRoot = CURATED_FPS?.fps;
+  if (!fpsRoot) return anchors;
+
+  (Object.keys(fpsRoot) as QualitySetting[]).forEach(quality => {
+    const byResolution = fpsRoot[quality];
+    if (!byResolution) return;
+    (Object.keys(byResolution) as Resolution[]).forEach(resolution => {
+      const byGpu = byResolution[resolution];
+      if (!byGpu) return;
+      Object.entries(byGpu).forEach(([gpuId, gamesMap]) => {
+        const gpu = GPU_MAP[gpuId];
+        if (!gpu || !gamesMap) return;
+        const indexValue = gpuIndex(getGpuScore(gpu, resolution));
+        if (!Number.isFinite(indexValue) || indexValue <= 0) return;
+        Object.entries(gamesMap).forEach(([gameId, fps]) => {
+          if (typeof fps !== 'number' || !Number.isFinite(fps)) return;
+          const bucket = anchors[quality][resolution];
+          if (!bucket[gameId]) {
+            bucket[gameId] = [];
+          }
+          bucket[gameId].push({ gpuId, fps, gpuIndexValue: indexValue });
+        });
+      });
+    });
+  });
+
+  (Object.keys(anchors) as QualitySetting[]).forEach(quality => {
+    (Object.keys(anchors[quality]) as Resolution[]).forEach(resolution => {
+      Object.values(anchors[quality][resolution]).forEach(list => {
+        list.sort((a, b) => a.gpuIndexValue - b.gpuIndexValue);
+      });
+    });
+  });
+
+  return anchors;
+}
+
+function estimateFpsFromAnchors(
+  gpuId: string,
+  gameId: string,
+  resolution: Resolution,
+  quality: QualitySetting
+) {
+  const anchors = CURATED_ANCHORS?.[quality]?.[resolution]?.[gameId];
+  if (!anchors || anchors.length === 0) return null;
+  const gpu = GPU_MAP[gpuId];
+  if (!gpu) return null;
+  const targetIndex = gpuIndex(getGpuScore(gpu, resolution));
+  if (!Number.isFinite(targetIndex) || targetIndex <= 0) return null;
+
+  let best = anchors[0];
+  let bestDiff = Math.abs(Math.log(targetIndex / Math.max(anchors[0].gpuIndexValue, 1e-6)));
+  for (let i = 1; i < anchors.length; i += 1) {
+    const anchor = anchors[i];
+    if (!Number.isFinite(anchor.gpuIndexValue) || anchor.gpuIndexValue <= 0) continue;
+    const diff = Math.abs(Math.log(targetIndex / anchor.gpuIndexValue));
+    if (diff < bestDiff) {
+      best = anchor;
+      bestDiff = diff;
+    }
+  }
+
+  const ratioRaw = targetIndex / Math.max(best.gpuIndexValue, 1e-6);
+  const ratio = clamp(ratioRaw, ESTIMATE_RATIO_MIN, ESTIMATE_RATIO_MAX);
+  return best.fps * Math.pow(ratio, ESTIMATE_RATIO_EXP);
+}
+
+function lookupFpsSample(
+  gpuId: string,
+  gameId: string,
+  resolution: Resolution,
+  quality: QualitySetting
+): FpsSample | null {
+  const curated = lookupCuratedFps(gpuId, gameId, resolution, quality);
+  if (curated !== null) {
+    return { fps: curated, source: 'curated' };
+  }
+  const estimated = estimateFpsFromAnchors(gpuId, gameId, resolution, quality);
+  if (estimated !== null) {
+    return { fps: estimated, source: 'estimated' };
+  }
+  return null;
 }
 
 type GameMetrics = {
@@ -199,13 +304,14 @@ type GameMetrics = {
   effectiveFps: number;
   stutterRisk: number;
   vramPressure: number;
-  hasBenchmark: boolean;
+  benchmarkSource: FpsSource;
   gpuIndexValue: number;
 };
 
 type FpsReference = {
   fpsTypical: number;
   gpuIndexValue: number;
+  source: FpsSource;
 };
 
 function computeGameMetrics(
@@ -225,13 +331,15 @@ function computeGameMetrics(
     (RES_DEMAND[input.resolution] * (0.6 + weights.gpu) * (typicalBound === 'GPU_HEAVY' ? 1.08 : 1));
 
   const quality: QualitySetting = category === 'ESPORTS' ? 'low' : 'ultra';
-  const curated = lookupCuratedFps(gpu.id, game.id, input.resolution, quality);
+  const sample = lookupFpsSample(gpu.id, game.id, input.resolution, quality);
   const baseFps = CATEGORY_BASE_FPS[category] * RES_SCALE[input.resolution];
-  let gpuFps = curated ?? baseFps * gpuIndex(getGpuScore(gpu, input.resolution));
+  let gpuFps = sample?.fps ?? baseFps * gpuIndex(getGpuScore(gpu, input.resolution));
+  let benchmarkSource: FpsSource = sample?.source ?? 'model';
 
-  if (curated === null && reference && reference.gpuIndexValue > 0) {
+  if (!sample && reference && reference.gpuIndexValue > 0 && Number.isFinite(reference.fpsTypical)) {
     const ratio = gpuIndex(getGpuScore(gpu, input.resolution)) / reference.gpuIndexValue;
     gpuFps = reference.fpsTypical * ratio;
+    benchmarkSource = 'estimated';
   }
 
   const refreshScale = refreshDemand(input.refreshRate);
@@ -268,7 +376,7 @@ function computeGameMetrics(
     effectiveFps,
     stutterRisk,
     vramPressure,
-    hasBenchmark: curated !== null,
+    benchmarkSource,
     gpuIndexValue: gpuIndex(getGpuScore(gpu, input.resolution))
   };
 }
@@ -282,6 +390,8 @@ type AggregateMetrics = {
   effectiveFpsAvg: number;
   stutterRiskAvg: number;
   vramPressureAvg: number;
+  curatedCount: number;
+  estimatedCount: number;
   benchmarkCoverage: number;
 };
 
@@ -309,8 +419,9 @@ function aggregateMetrics(
   const effectiveFpsAvg = perGame.reduce((s, g) => s + g.effectiveFps, 0) / perGame.length;
   const stutterRiskAvg = perGame.reduce((s, g) => s + g.stutterRisk, 0) / perGame.length;
   const vramPressureAvg = perGame.reduce((s, g) => s + g.vramPressure, 0) / perGame.length;
-  const benchmarkCoverage =
-    perGame.length > 0 ? perGame.filter(g => g.hasBenchmark).length / perGame.length : 0;
+  const curatedCount = perGame.filter(g => g.benchmarkSource === 'curated').length;
+  const estimatedCount = perGame.filter(g => g.benchmarkSource !== 'curated').length;
+  const benchmarkCoverage = perGame.length > 0 ? curatedCount / perGame.length : 0;
 
   return {
     perGame,
@@ -321,6 +432,8 @@ function aggregateMetrics(
     effectiveFpsAvg,
     stutterRiskAvg,
     vramPressureAvg,
+    curatedCount,
+    estimatedCount,
     benchmarkCoverage
   };
 }
@@ -407,7 +520,7 @@ function suggestParts(
     const avgGain = Math.max(0, Math.round(calcAvgFpsGainPct(baseline, candidateAgg)));
     const utilityGain = Math.max(0, Math.round(calcUtilityGainPct(baseline, candidateAgg)));
     const rawScore = getGpuScore(g, input.resolution);
-    const estimated = candidateAgg.benchmarkCoverage < 0.5;
+    const estimated = candidateAgg.benchmarkCoverage < 1;
     const isCuratedGpu = CURATED_GPU_IDS.has(g.id);
     return {
       gpu: g,
@@ -424,13 +537,9 @@ function suggestParts(
 
   if (candidates.length === 0) return [];
 
-  const curatedCandidates = candidates.filter(c => c.isCuratedGpu);
-  const curatedPool = curatedCandidates.length ? curatedCandidates : candidates;
-  const validated = curatedPool.filter(c => !c.estimated);
-  const valuePool = validated.length ? validated : curatedPool;
-  const byValue = [...valuePool].sort((a, b) => b.valueScore - a.valueScore);
-  const byPerf = [...curatedPool].sort((a, b) => b.rawScore - a.rawScore || b.avgGain - a.avgGain);
-  const byBalanced = [...valuePool].sort((a, b) => b.balanceScore - a.balanceScore);
+  const byValue = [...candidates].sort((a, b) => b.valueScore - a.valueScore);
+  const byPerf = [...candidates].sort((a, b) => b.rawScore - a.rawScore || b.avgGain - a.avgGain);
+  const byBalanced = [...candidates].sort((a, b) => b.balanceScore - a.balanceScore);
 
   const used = new Set<string>();
   const pickUnique = (list: typeof candidates) => list.find(item => !used.has(item.gpu.id)) ?? list[0];
@@ -456,10 +565,10 @@ function suggestParts(
   return picks.map(({ label, candidate }): PartPick => {
     const g = candidate.gpu;
     const isUnvalidated = !candidate.isCuratedGpu;
-    const avgFpsGainPct = candidate.isCuratedGpu ? candidate.avgGain : undefined;
+    const avgFpsGainPct = candidate.avgGain;
     const bullets: string[] = [];
     if (candidate.estimated || isUnvalidated) {
-      bullets.push('Estimated performance; limited benchmark coverage.');
+      bullets.push('Estimated performance based on nearby GPUs.');
     }
     if (baseline.boundType === 'GPU_BOUND') {
       bullets.push('Largest FPS gains for your selection.');
@@ -628,7 +737,10 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
 
   const baselineAgg = aggregateMetrics(cpu, gpu, input, selectedGames);
   const referenceMap: Record<string, FpsReference> = Object.fromEntries(
-    baselineAgg.perGame.map(g => [g.game.id, { fpsTypical: g.fpsTypical, gpuIndexValue: g.gpuIndexValue }])
+    baselineAgg.perGame.map(g => [
+      g.game.id,
+      { fpsTypical: g.fpsTypical, gpuIndexValue: g.gpuIndexValue, source: g.benchmarkSource }
+    ])
   );
 
   const reasons: string[] = [];
@@ -653,9 +765,12 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     reasons.push('Resolution and refresh tradeoffs balance the load.');
   }
 
-  if (baselineAgg.benchmarkCoverage > 0 && baselineAgg.benchmarkCoverage < 1) {
-    const count = Math.round(baselineAgg.benchmarkCoverage * selectedGames.length);
-    reasons.push(`Benchmark coverage: ${count}/${selectedGames.length} games (others estimated)`);
+  if (baselineAgg.curatedCount > 0 && baselineAgg.curatedCount < selectedGames.length) {
+    reasons.push(
+      `Benchmark coverage: ${baselineAgg.curatedCount}/${selectedGames.length} curated, ${baselineAgg.estimatedCount}/${selectedGames.length} estimated`
+    );
+  } else if (baselineAgg.curatedCount === 0) {
+    reasons.push('Benchmark coverage: no direct benchmarks; estimates derived from similar GPUs.');
   }
 
   const cpuDeficit = headroomRatio < 1 ? (1 / headroomRatio - 1) * 100 : 0;
