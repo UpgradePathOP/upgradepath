@@ -546,7 +546,7 @@ function suggestParts(
     }
     const utilityGain = Math.max(0, Math.round(calcUtilityGainPct(baseline, candidateAgg)));
     const rawScore = getGpuScore(g, input.resolution);
-    const confidence =
+    const confidence: PartPick['confidence'] =
       candidateAgg.curatedCount === gamesProfiles.length
         ? 'confirmed'
         : candidateAgg.curatedCount > 0
