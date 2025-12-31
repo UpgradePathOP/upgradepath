@@ -413,6 +413,7 @@ type AggregateMetrics = {
   targetLimitedShare: number;
   curatedCount: number;
   estimatedCount: number;
+  modelCount: number;
   benchmarkCoverage: number;
 };
 
@@ -442,7 +443,8 @@ function aggregateMetrics(
   const vramPressureAvg = perGame.reduce((s, g) => s + g.vramPressure, 0) / perGame.length;
   const targetLimitedShare = perGame.length > 0 ? perGame.filter(g => g.targetLimited).length / perGame.length : 0;
   const curatedCount = perGame.filter(g => g.benchmarkSource === 'curated').length;
-  const estimatedCount = perGame.filter(g => g.benchmarkSource !== 'curated').length;
+  const estimatedCount = perGame.filter(g => g.benchmarkSource === 'estimated').length;
+  const modelCount = perGame.filter(g => g.benchmarkSource === 'model').length;
   const benchmarkCoverage = perGame.length > 0 ? curatedCount / perGame.length : 0;
 
   return {
@@ -457,6 +459,7 @@ function aggregateMetrics(
     targetLimitedShare,
     curatedCount,
     estimatedCount,
+    modelCount,
     benchmarkCoverage
   };
 }
@@ -549,9 +552,9 @@ function suggestParts(
     const confidence: PartPick['confidence'] =
       candidateAgg.curatedCount === gamesProfiles.length
         ? 'confirmed'
-        : candidateAgg.curatedCount > 0
-        ? 'estimated'
-        : 'speculative';
+        : candidateAgg.modelCount === gamesProfiles.length
+        ? 'speculative'
+        : 'estimated';
     const estimated = confidence !== 'confirmed';
     const isCuratedGpu = CURATED_GPU_IDS.has(g.id);
     return {
@@ -829,10 +832,12 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
 
   if (baselineAgg.curatedCount > 0 && baselineAgg.curatedCount < selectedGames.length) {
     reasons.push(
-      `Benchmark coverage: ${baselineAgg.curatedCount}/${selectedGames.length} curated, ${baselineAgg.estimatedCount}/${selectedGames.length} estimated`
+      `Benchmark coverage: ${baselineAgg.curatedCount}/${selectedGames.length} curated, ${baselineAgg.estimatedCount}/${selectedGames.length} estimated, ${baselineAgg.modelCount}/${selectedGames.length} modeled`
     );
-  } else if (baselineAgg.curatedCount === 0) {
+  } else if (baselineAgg.curatedCount === 0 && baselineAgg.estimatedCount > 0) {
     reasons.push('Benchmark coverage: no direct benchmarks; estimates derived from similar GPUs.');
+  } else if (baselineAgg.curatedCount === 0 && baselineAgg.modelCount > 0) {
+    reasons.push('Benchmark coverage: no direct benchmarks; estimates derived from component scores.');
   }
 
   const cpuDeficit = headroomRatio < 1 ? (1 / headroomRatio - 1) * 100 : 0;
