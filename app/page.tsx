@@ -200,6 +200,8 @@ export default function Page() {
         ? 'CPU-limited'
         : result.verdict.boundType === 'GPU_BOUND'
         ? 'GPU-limited'
+        : result.verdict.boundType === 'TARGET_LIMITED'
+        ? 'Target-limited'
         : 'Mixed';
     const confidencePct = Math.round(result.verdict.confidence * 100);
     const text = `

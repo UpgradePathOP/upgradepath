@@ -13,7 +13,7 @@ export type StorageType = 'HDD' | 'SATA SSD' | 'NVMe';
 export type GameCategory = 'ESPORTS' | 'AAA' | 'UE5_AAA' | 'SIM' | 'INDIE';
 export type TypicalBound = 'CPU_HEAVY' | 'GPU_HEAVY' | 'MIXED';
 export type Heaviness = 'LOW' | 'MED' | 'HIGH';
-export type BottleneckType = 'CPU_BOUND' | 'GPU_BOUND' | 'MIXED';
+export type BottleneckType = 'CPU_BOUND' | 'GPU_BOUND' | 'MIXED' | 'TARGET_LIMITED';
 
 export interface Cpu {
   id: string;
@@ -97,6 +97,7 @@ export interface PartPick {
   avgFpsGainRangePct?: { min: number; max: number };
   label?: string;
   estimated?: boolean;
+  confidence?: 'confirmed' | 'estimated' | 'speculative';
   qualitativeBullets: string[];
   notes: string[];
 }
@@ -113,6 +114,7 @@ export interface AnalysisResult {
       price: number;
       impactSummary: string;
       estimated?: boolean;
+      confidence?: 'confirmed' | 'estimated' | 'speculative';
     }>;
   };
   upgradePath: Array<{

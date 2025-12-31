@@ -30,6 +30,11 @@ export function ValueCard({ bestValue }: { bestValue: AnalysisResult['bestValue'
               <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-muted">
                 {option.label}
               </p>
+              {option.confidence && option.confidence !== 'confirmed' && (
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-muted">
+                  {option.confidence}
+                </p>
+              )}
               <div className="mt-1 flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{option.name}</span>
                 <span className="text-xs text-slate-600 dark:text-slate-300">${option.price}</span>

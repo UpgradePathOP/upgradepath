@@ -6,6 +6,8 @@ export function VerdictCard({ verdict }: { verdict: AnalysisResult['verdict'] })
       ? 'border-warning-500'
       : verdict.boundType === 'GPU_BOUND'
       ? 'border-danger-500'
+      : verdict.boundType === 'TARGET_LIMITED'
+      ? 'border-amber-500'
       : 'border-brand-500';
 
   const gameSummary = verdict.games ?? [];
@@ -23,6 +25,8 @@ export function VerdictCard({ verdict }: { verdict: AnalysisResult['verdict'] })
               ? 'Mostly CPU-limited'
               : verdict.boundType === 'GPU_BOUND'
               ? 'Mostly GPU-limited'
+              : verdict.boundType === 'TARGET_LIMITED'
+              ? 'Target-limited'
               : 'Mixed'}
           </p>
         </div>

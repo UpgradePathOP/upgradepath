@@ -45,6 +45,11 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                         Avg FPS: +{item.avgFpsGainPct}%
                       </div>
                     )}
+                    {item.partType === 'GPU' && item.confidence && item.confidence !== 'confirmed' && (
+                      <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-muted">
+                        {item.confidence}
+                      </div>
+                    )}
                     {item.qualitativeBullets.map((bullet, idx) => (
                       <div key={`${item.id}-bullet-${idx}`} className="flex items-start gap-2">
                         <div className="w-1 h-1 rounded-full bg-slate-400 mt-2" />
