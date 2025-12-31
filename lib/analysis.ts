@@ -649,10 +649,11 @@ function suggestRam(input: AnalysisInput, cpu: Cpu): PartPick[] {
     { id: 'ram-32-3600', name: '32GB (2x16) DDR4-3600', price: 90, capacity: 32, type: 'DDR4' as const },
     { id: 'ram-32-6000', name: '32GB (2x16) DDR5-6000', price: 120, capacity: 32, type: 'DDR5' as const }
   ];
-  const needMore = input.ramAmount < 16 ? 16 : input.ramAmount < 32 ? 32 : 0;
+  const currentCapacity = input.ramAmount;
+  const needMore = currentCapacity < 16 ? 16 : currentCapacity < 32 ? 32 : 0;
   const budgetLimitVal = budgetLimit[input.budgetBucket];
   const matches = kits
-    .filter(k => (needMore ? k.capacity >= needMore : true))
+    .filter(k => (needMore ? k.capacity >= needMore : k.capacity > currentCapacity))
     .filter(k => k.type === cpu.memoryType)
     .filter(k => k.price <= budgetLimitVal)
     .slice(0, 2);
