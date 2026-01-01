@@ -224,6 +224,8 @@ type AnchorEntry = { gpuId: string; fps: number; gpuIndexValue: number };
 
 const ESTIMATE_RATIO_MAX = 2.2;
 const ESTIMATE_RATIO_EXP = 0.92;
+const PERF_GAIN_EXP = 0.9;
+const PERF_GAIN_CAP = 1.4;
 
 function lookupCuratedFps(gpuId: string, gameId: string, resolution: Resolution, quality: QualitySetting) {
   const fps = CURATED_FPS?.fps?.[quality]?.[resolution]?.[gpuId]?.[gameId];
@@ -559,10 +561,11 @@ function suggestParts(
   }
 
   const gpuHeavyCount = gamesProfiles.filter(g => resolveTypicalBound(g) === 'GPU_HEAVY').length;
+  const baselinePerfIndex = gpuPerfIndex(gpu, input.resolution);
   const baseList = (gpus as Gpu[]).filter(g => g.price <= limit && g.id !== gpu.id);
   const candidates = baseList.map(g => {
     const candidateAgg = aggregateMetrics(cpu, g, input, gamesProfiles, referenceMap);
-    const rawAvgGain = calcAvgFpsGainPct(baseline, candidateAgg);
+    let rawAvgGain = calcAvgFpsGainPct(baseline, candidateAgg);
     let avgGain = Math.max(0, Math.round(rawAvgGain));
     const rawUtilityGain = calcUtilityGainPct(baseline, candidateAgg);
     const utilityGain = Math.max(0, Math.round(rawUtilityGain));
@@ -575,6 +578,12 @@ function suggestParts(
         ? 'speculative'
         : 'estimated';
     const estimated = confidence !== 'confirmed';
+    const perfRatio = baselinePerfIndex > 0 ? perfScore / baselinePerfIndex : 1;
+    const perfGainPct = (Math.pow(perfRatio, PERF_GAIN_EXP) - 1) * 100;
+    if (estimated && Number.isFinite(perfGainPct)) {
+      rawAvgGain = Math.min(rawAvgGain, perfGainPct * PERF_GAIN_CAP);
+      avgGain = Math.max(0, Math.round(rawAvgGain));
+    }
     const isCuratedGpu = CURATED_GPU_IDS.has(g.id);
     return {
       gpu: g,
