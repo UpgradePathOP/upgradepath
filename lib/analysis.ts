@@ -265,16 +265,6 @@ const getCuratedOverlapAverage = (
       count += 1;
     }
   }
-  const orderedUpgradePath = (() => {
-    const preferred = bestValue.category;
-    if (!['GPU', 'CPU', 'RAM', 'Storage', 'Monitor'].includes(preferred)) {
-      return upgradePath;
-    }
-    const idx = upgradePath.findIndex(item => item.category === preferred);
-    if (idx <= 0) return upgradePath;
-    return [upgradePath[idx], ...upgradePath.slice(0, idx), ...upgradePath.slice(idx + 1)];
-  })();
-
   return {
     baselineAvg: count > 0 ? baselineTotal / count : 0,
     candidateAvg: count > 0 ? candidateTotal / count : 0,
@@ -1317,6 +1307,16 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   if (input.budgetBucket === '$0-100') {
     warnings.push('Under $100: focus on RAM/SSD or save for a larger jump.');
   }
+
+  const orderedUpgradePath = (() => {
+    const preferred = bestValue.category;
+    if (!['GPU', 'CPU', 'RAM', 'Storage', 'Monitor'].includes(preferred)) {
+      return upgradePath;
+    }
+    const idx = upgradePath.findIndex(item => item.category === preferred);
+    if (idx <= 0) return upgradePath;
+    return [upgradePath[idx], ...upgradePath.slice(0, idx), ...upgradePath.slice(idx + 1)];
+  })();
 
   return {
     verdict: {
