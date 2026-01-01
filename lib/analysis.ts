@@ -1123,7 +1123,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   const ramConstrained = input.ramAmount < 16;
   const storagePick = recommendedParts.find(p => p.category === 'Storage')?.items ?? [];
   const storageHelpful = input.storageType === 'HDD' && storagePick.length > 0;
-  const noMeaningfulGpu = bestGpuGain > 0 ? bestGpuGain < 8 : true;
+  const noMeaningfulGpu = bestGpuGain > 0 ? bestGpuGain < 12 : true;
   const topCategory = upgradePath[0]?.category;
   const bestGroup =
     (topCategory && groupsWithItems.find(g => g.category === topCategory)) ||
@@ -1140,7 +1140,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   let bestValueLocked = false;
 
   if (bestGroup && bestItems.length > 0) {
-    if (bestGroup.category === 'RAM' && !ramConstrained && noMeaningfulGpu) {
+    if ((bestGroup.category === 'RAM' || bestGroup.category === 'GPU') && !ramConstrained && noMeaningfulGpu) {
       if (storageHelpful) {
         bestValue = {
           category: 'Storage',
