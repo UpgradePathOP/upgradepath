@@ -222,7 +222,6 @@ type FpsSource = 'curated' | 'estimated' | 'model';
 type FpsSample = { fps: number; source: FpsSource };
 type AnchorEntry = { gpuId: string; fps: number; gpuIndexValue: number };
 
-const ESTIMATE_RATIO_MIN = 0.55;
 const ESTIMATE_RATIO_MAX = 2.2;
 const ESTIMATE_RATIO_EXP = 0.92;
 
@@ -307,7 +306,7 @@ function estimateFpsFromAnchors(
   }
 
   const ratioRaw = targetIndex / Math.max(best.gpuIndexValue, 1e-6);
-  const ratio = clamp(ratioRaw, ESTIMATE_RATIO_MIN, ESTIMATE_RATIO_MAX);
+  const ratio = ratioRaw >= 1 ? clamp(ratioRaw, 1, ESTIMATE_RATIO_MAX) : ratioRaw;
   return best.fps * Math.pow(ratio, ESTIMATE_RATIO_EXP);
 }
 
@@ -589,9 +588,24 @@ function suggestParts(
       confidence,
       isCuratedGpu,
       effectiveFps: candidateAgg.effectiveFpsAvg,
-      valueScore: rawAvgGain / Math.max(g.price, 1),
-      balanceScore: rawAvgGain / Math.sqrt(Math.max(g.price, 1))
+      valueScore: 0,
+      balanceScore: 0
     };
+  });
+
+  const byPerfAsc = [...candidates].sort((a, b) => a.perfScore - b.perfScore);
+  let floorGain = 0;
+  byPerfAsc.forEach(candidate => {
+    if (candidate.rawAvgGain < floorGain) {
+      candidate.rawAvgGain = floorGain;
+      candidate.avgGain = Math.max(0, Math.round(candidate.rawAvgGain));
+    } else {
+      floorGain = candidate.rawAvgGain;
+    }
+  });
+  candidates.forEach(candidate => {
+    candidate.valueScore = candidate.rawAvgGain / Math.max(candidate.gpu.price, 1);
+    candidate.balanceScore = candidate.rawAvgGain / Math.sqrt(Math.max(candidate.gpu.price, 1));
   });
 
   const improving = candidates.filter(c => c.rawAvgGain > 1);
