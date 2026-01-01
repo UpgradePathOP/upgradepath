@@ -32,65 +32,6 @@ const harmonicMean = (values: number[]) => {
   return denom > 0 ? valid.length / denom : 0;
 };
 
-type GpuScoreTriplet = {
-  score1080: number;
-  score1440: number;
-  score4k: number;
-};
-
-const GPU_TIER_WEIGHT = 1.8;
-const GPU_SERIES_WEIGHT = 1.0;
-
-const deriveGpuRank = (gpu: Gpu) => {
-  const match = gpu.id.match(/(\d{3,4})/);
-  if (!match) return 0;
-  const model = Number.parseInt(match[1], 10);
-  if (!Number.isFinite(model)) return 0;
-  const series = Math.floor(model / 100);
-  const tier = model % 100;
-  return series * GPU_SERIES_WEIGHT + tier * GPU_TIER_WEIGHT;
-};
-
-const buildNormalizedGpuScores = () => {
-  const base = (gpus as Gpu[]).map(g => ({
-    id: g.id,
-    vendor: g.id.startsWith('rx') ? 'AMD' : g.id.startsWith('rtx') || g.id.startsWith('gtx') ? 'NVIDIA' : 'OTHER',
-    rank: deriveGpuRank(g),
-    score1080: g.score1080,
-    score1440: g.score1440,
-    score4k: g.score4k
-  }));
-
-  const applyOrdering = (items: typeof base) => {
-    const sorted = items.filter(i => i.rank > 0).sort((a, b) => a.rank - b.rank);
-    let prev1080 = 0;
-    let prev1440 = 0;
-    let prev4k = 0;
-    sorted.forEach(item => {
-      item.score1080 = clamp(Math.max(item.score1080, prev1080 + 1), 0, 100);
-      item.score1440 = clamp(Math.max(item.score1440, prev1440 + 1), 0, 100);
-      item.score4k = clamp(Math.max(item.score4k, prev4k + 1), 0, 100);
-      prev1080 = item.score1080;
-      prev1440 = item.score1440;
-      prev4k = item.score4k;
-    });
-  };
-
-  applyOrdering(base.filter(i => i.vendor === 'NVIDIA'));
-  applyOrdering(base.filter(i => i.vendor === 'AMD'));
-
-  return base.reduce<Record<string, GpuScoreTriplet>>((acc, item) => {
-    acc[item.id] = {
-      score1080: item.score1080,
-      score1440: item.score1440,
-      score4k: item.score4k
-    };
-    return acc;
-  }, {});
-};
-
-const NORMALIZED_GPU_SCORES = buildNormalizedGpuScores();
-
 const CPU_GAMMA = 1.25;
 const GPU_GAMMA = 2.3;
 
@@ -171,11 +112,9 @@ const budgetLimit: Record<BudgetBucket, number> = {
 };
 
 const getGpuScore = (gpu: Gpu, resolution: AnalysisInput['resolution']) => {
-  const normalized = NORMALIZED_GPU_SCORES[gpu.id];
-  const source = normalized ?? gpu;
-  if (resolution === '4K') return source.score4k;
-  if (resolution === '1440p') return source.score1440;
-  return source.score1080;
+  if (resolution === '4K') return gpu.score4k;
+  if (resolution === '1440p') return gpu.score1440;
+  return gpu.score1080;
 };
 
 const cpuIndex = (score: number) => Math.pow(score / 100, CPU_GAMMA);
