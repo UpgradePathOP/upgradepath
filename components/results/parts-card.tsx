@@ -33,7 +33,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
           Specific Part Picks (by budget)
         </h3>
         <p className="text-xs text-slate-500 dark:text-muted">
-          Some links may be affiliate links. They don&apos;t affect recommendations.
+          Buy options (support this project). Links don&apos;t affect recommendations.
         </p>
       </div>
       <div className="columns-1 md:columns-2 [column-gap:1rem]">
@@ -92,7 +92,11 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                   : isBalanced
                   ? 'text-slate-500 dark:text-slate-400'
                   : 'text-brand-600 dark:text-brand-400';
-                const cardTone = 'border border-slate-200/60 dark:border-border bg-slate-50 dark:bg-border/40';
+                const cardTone = isFast
+                  ? 'border border-sky-500/40 dark:border-sky-500/30 bg-sky-50/40 dark:bg-sky-500/10 ring-1 ring-sky-500/10'
+                  : isBest
+                  ? 'border border-brand-500/40 dark:border-brand-500/30 bg-brand-50/50 dark:bg-brand-500/10 ring-1 ring-brand-500/10'
+                  : 'border border-slate-200/60 dark:border-border bg-slate-50 dark:bg-border/40';
                 return (
                   <div key={item.id} className={`rounded-lg p-3 ${cardTone}`}>
                   {item.label && (
@@ -134,9 +138,6 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                     </div>
                   )}
                   <div className="mt-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-muted mb-2">
-                      Buy options (support this project)
-                    </p>
                     <div className="flex flex-wrap gap-2">
                       {links.map(link => (
                         <a
@@ -151,7 +152,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                       ))}
                     </div>
                   </div>
-                  </div>
+                </div>
                 );
               });
               })()}
