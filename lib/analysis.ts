@@ -154,6 +154,21 @@ const resolveTypicalBound = (game: GameProfile): TypicalBound => {
 const resolveHeaviness = (value: Heaviness | undefined, fallback: Heaviness): Heaviness =>
   value ?? fallback;
 
+const getVramTargets = (input: AnalysisInput, selectedGames: GameProfile[]) => {
+  const vramHeavySelected = selectedGames.some(
+    g => resolveHeaviness(g.vramHeaviness, g.vramHeavy ? 'HIGH' : 'MED') === 'HIGH'
+  );
+  let warnAt = input.resolution === '4K' ? 10 : input.resolution === '1440p' ? 8 : 6;
+  let okAt = input.resolution === '4K' ? 12 : input.resolution === '1440p' ? 10 : 8;
+  if (vramHeavySelected) {
+    warnAt += 2;
+    okAt += 2;
+  }
+  warnAt = Math.min(warnAt, 16);
+  okAt = Math.min(okAt, 16);
+  return { warnAt, okAt, vramHeavySelected };
+};
+
 const resolveWeights = (game: GameProfile) => {
   const cpu = clamp(game.cpuWeight ?? 0.5, 0.2, 0.8);
   const gpu = clamp(game.gpuWeight ?? 0.5, 0.2, 0.8);
@@ -545,12 +560,10 @@ function suggestParts(
     const candidateAgg = aggregateMetrics(cpu, g, input, gamesProfiles, referenceMap);
     const rawAvgGain = calcAvgFpsGainPct(baseline, candidateAgg);
     let avgGain = Math.max(0, Math.round(rawAvgGain));
-    if (isTargetLimited) {
-      avgGain = Math.min(Math.round(avgGain * 0.6), 80);
-    }
     const rawUtilityGain = calcUtilityGainPct(baseline, candidateAgg);
     const utilityGain = Math.max(0, Math.round(rawUtilityGain));
     const rawScore = candidateAgg.fpsTypicalAvg;
+    const perfScore = gpuPerfIndex(g, input.resolution);
     const confidence: PartPick['confidence'] =
       candidateAgg.curatedCount === gamesProfiles.length
         ? 'confirmed'
@@ -566,12 +579,13 @@ function suggestParts(
       rawAvgGain,
       rawUtilityGain,
       rawScore,
+      perfScore,
       estimated,
       confidence,
       isCuratedGpu,
       effectiveFps: candidateAgg.effectiveFpsAvg,
-      valueScore: utilityGain / Math.max(g.price, 1),
-      balanceScore: utilityGain / Math.sqrt(Math.max(g.price, 1))
+      valueScore: rawAvgGain / Math.max(g.price, 1),
+      balanceScore: rawAvgGain / Math.sqrt(Math.max(g.price, 1))
     };
   });
 
@@ -580,7 +594,7 @@ function suggestParts(
   if (usable.length === 0) return [];
 
   const byValue = [...usable].sort((a, b) => b.valueScore - a.valueScore);
-  const byPerf = [...usable].sort((a, b) => b.rawScore - a.rawScore || b.avgGain - a.avgGain);
+  const byPerf = [...usable].sort((a, b) => b.perfScore - a.perfScore || b.avgGain - a.avgGain);
   const byBalanced = [...usable].sort((a, b) => b.balanceScore - a.balanceScore);
 
   const used = new Set<string>();
@@ -942,8 +956,11 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
             ? 'GPU upgrades help, but refresh targets are above expected FPS.'
             : 'GPU is the dominant limiter for your selection.'
         );
-        if (selectedGames.some(g => g.vramHeaviness === 'HIGH') && gpu.vram < 8) {
-          reasons.push('Some modern games can exceed 6GB VRAM at high textures; 8GB helps at 1080p.');
+        const vramTargets = getVramTargets(input, selectedGames);
+        if (baselineAgg.vramPressureAvg >= 60 && gpu.vram < vramTargets.warnAt) {
+          reasons.push(
+            `Some VRAM-heavy titles may need ${vramTargets.warnAt}GB+ at ${input.resolution} for higher textures.`
+          );
         }
       } else if (u.category === 'RAM') {
         impactSummary = 'Improves stability in modern titles; small avg FPS change';
@@ -1005,7 +1022,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
         : [...bestItems];
     const valuePick =
       bestGroup.category === 'GPU'
-        ? bestItems.find(item => (item.label ?? '').toLowerCase() === 'best value')
+        ? bestItems.find(item => (item.label ?? '').toLowerCase().includes('best value'))
         : undefined;
     const top = valuePick ?? sorted[0];
     const range = bestGroup.category === 'GPU' ? estimateRange(bestItems) : null;
@@ -1060,17 +1077,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
 
   const warnings: string[] = [];
   if (baselineAgg.vramPressureAvg >= 60) {
-    const vramHeavySelected = selectedGames.some(
-      g => resolveHeaviness(g.vramHeaviness, g.vramHeavy ? 'HIGH' : 'MED') === 'HIGH'
-    );
-    let warnAt = input.resolution === '4K' ? 10 : input.resolution === '1440p' ? 8 : 6;
-    let okAt = input.resolution === '4K' ? 12 : input.resolution === '1440p' ? 10 : 8;
-    if (vramHeavySelected) {
-      warnAt += 2;
-      okAt += 2;
-    }
-    warnAt = Math.min(warnAt, 16);
-    okAt = Math.min(okAt, 16);
+    const { warnAt, okAt } = getVramTargets(input, selectedGames);
     const currentVram = gpu.vram;
     const recommendedVram = Math.max(
       0,
