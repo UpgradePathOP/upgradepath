@@ -533,6 +533,13 @@ const calcUtilityGainPct = (baseline: AggregateMetrics, candidate: AggregateMetr
   return ((next - base) / floor) * 100;
 };
 
+const describeRawUplift = (gain: number) => {
+  if (!Number.isFinite(gain) || gain <= 0) return 'Raw GPU potential';
+  if (gain < 12) return 'Marginal raw uplift';
+  if (gain < 35) return 'Modest raw uplift';
+  return 'Large raw uplift';
+};
+
 function suggestParts(
   category: 'CPU' | 'GPU',
   input: AnalysisInput,
@@ -1146,21 +1153,25 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
           ? bestItems.find(item => (item.label ?? '').toLowerCase().includes('best value'))
           : undefined;
       const top = valuePick ?? sorted[0];
-      const range = bestGroup.category === 'GPU' ? estimateRange(bestItems) : null;
-      const reasons: string[] = [];
-      let impactSummary = '';
+    const range = bestGroup.category === 'GPU' ? estimateRange(bestItems) : null;
+    const reasons: string[] = [];
+    let impactSummary = '';
+    const gainValues = bestGroup.category === 'GPU'
+      ? bestItems.map(item => item.avgFpsGainPct ?? 0).filter(v => v > 0)
+      : [];
+    const bestGain = gainValues.length > 0 ? Math.max(...gainValues) : 0;
 
     if (bestGroup.category === 'GPU') {
       if (top.avgFpsGainPct) {
         if (useRawPotentialLabel) {
-          impactSummary = `Large raw uplift, but ineffective for ${input.resolution} @ ${input.refreshRate}Hz`;
+          impactSummary = `${describeRawUplift(top.avgFpsGainPct)} (ineffective for ${input.resolution} @ ${input.refreshRate}Hz)`;
           reasons.push(`Raw GPU potential: ~+${top.avgFpsGainPct}%`);
         } else {
           impactSummary = `Estimated avg FPS gain: ~+${top.avgFpsGainPct}%`;
         }
       } else {
         if (useRawPotentialLabel) {
-          impactSummary = `Large raw uplift, but ineffective for ${input.resolution} @ ${input.refreshRate}Hz`;
+          impactSummary = `${describeRawUplift(bestGain)} (ineffective for ${input.resolution} @ ${input.refreshRate}Hz)`;
           if (range) {
             reasons.push(`Raw GPU potential: ${range}`);
           }

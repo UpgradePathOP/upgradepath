@@ -230,7 +230,9 @@ ${result.bestValue.options.map(o => `- ${o.label}: ${o.name} ($${o.price}) ${o.i
 ${rawPotential ? `\nNote: Raw GPU potential shown because the target is not reachable.` : ''}
 
 Upgrade Path:
-${result.upgradePath.map((u, i) => `${i + 1}. ${u.category} (${u.impactSummary})`).join('\n')}
+${result.upgradePath.length
+  ? result.upgradePath.map((u, i) => `${i + 1}. ${u.category} (${u.impactSummary})`).join('\n')
+  : 'No upgrades materially improve this target; consider lowering refresh or resolution.'}
 
 Warnings:
 ${result.warnings.map(w => `- ${w}`).join('\n')}

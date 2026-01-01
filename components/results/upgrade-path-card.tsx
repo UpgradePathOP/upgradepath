@@ -33,7 +33,9 @@ export function UpgradePathCard({ upgrades }: { upgrades: AnalysisResult['upgrad
           </div>
         ))}
         {upgrades.length === 0 && (
-          <div className="text-sm text-slate-500 dark:text-muted">No major upgrades recommended.</div>
+          <div className="text-sm text-slate-500 dark:text-muted">
+            No upgrades materially improve this target; consider lowering refresh or resolution.
+          </div>
         )}
       </div>
     </div>
