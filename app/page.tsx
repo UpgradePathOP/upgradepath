@@ -203,14 +203,13 @@ export default function Page() {
         : result.verdict.boundType === 'TARGET_LIMITED'
         ? 'Target-limited'
         : 'Mixed';
-    const confidencePct = Math.round(result.verdict.confidence * 100);
     const text = `
 UpgradePath Analysis
 System: ${cpuName} + ${gpuName}
 RAM: ${lastInput.ramAmount}GB ${lastInput.ramSpeed} | Storage: ${lastInput.storageType}
 Display: ${lastInput.resolution} @ ${lastInput.refreshRate}Hz | Budget: ${lastInput.budgetBucket}
 
-Verdict: ${verdictLabel} (${confidencePct}%)
+Verdict: ${verdictLabel}
 ${result.verdict.reasons.map(r => `- ${r}`).join('\n')}
 
 Best Value: ${result.bestValue.category} - ${result.bestValue.impactSummary}
