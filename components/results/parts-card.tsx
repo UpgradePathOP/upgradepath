@@ -23,9 +23,9 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
           Some links may be affiliate links. They don&apos;t affect recommendations.
         </p>
       </div>
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid md:grid-cols-2 gap-4 items-start">
         {recommendations.map(group => (
-          <div key={group.category} className="border border-slate-200 dark:border-border rounded-lg p-4">
+          <div key={group.category} className="border border-slate-200 dark:border-border rounded-lg p-4 h-fit">
             <div className="flex items-center gap-2 mb-3">
               {iconFor(group.category)}
               <p className="font-semibold text-slate-900 dark:text-slate-50">{group.category} upgrades</p>
