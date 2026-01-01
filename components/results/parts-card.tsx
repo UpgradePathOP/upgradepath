@@ -1,3 +1,4 @@
+import { getAffiliateLinks } from '@/lib/affiliate';
 import { AnalysisResult } from '@/lib/types';
 import { HardDrive, Cpu, Monitor, MemoryStick } from 'lucide-react';
 
@@ -13,10 +14,15 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
 
   return (
     <div className="bg-white dark:bg-surface rounded-xl shadow-lg p-6 border border-slate-100 dark:border-border">
-      <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50 mb-4 flex items-center gap-2">
-        <Monitor className="w-5 h-5" />
-        Specific Part Picks (by budget)
-      </h3>
+      <div className="mb-4 space-y-1">
+        <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+          <Monitor className="w-5 h-5" />
+          Specific Part Picks (by budget)
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-muted">
+          Some links may be affiliate links. They don&apos;t affect recommendations.
+        </p>
+      </div>
       <div className="grid md:grid-cols-2 gap-4">
         {recommendations.map(group => (
           <div key={group.category} className="border border-slate-200 dark:border-border rounded-lg p-4">
@@ -28,8 +34,11 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
               <p className="text-sm text-slate-500 dark:text-muted">No clear upgrade within budget.</p>
             )}
             <div className="space-y-2">
-              {group.items.map(item => (
-                <div key={item.id} className="bg-slate-50 dark:bg-surface/70 rounded-lg p-3">
+              {group.items.map(item => {
+                const links = getAffiliateLinks(item);
+                const hasSearch = links.some(link => link.kind === 'search');
+                return (
+                  <div key={item.id} className="bg-slate-50 dark:bg-surface/70 rounded-lg p-3">
                   {item.label && (
                     <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-muted mb-1">
                       {item.label}
@@ -66,8 +75,27 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                       ))}
                     </div>
                   )}
+                  <div className="mt-3">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-muted mb-2">
+                      Buy options{hasSearch ? ' (search)' : ''}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {links.map(link => (
+                        <a
+                          key={`${item.id}-${link.vendor}`}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-semibold text-brand-700 dark:text-brand-300 hover:text-brand-800 dark:hover:text-brand-200 transition"
+                        >
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}
