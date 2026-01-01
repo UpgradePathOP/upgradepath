@@ -42,7 +42,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                   <div className="mt-1 space-y-1">
                     {item.partType === 'GPU' && typeof item.avgFpsGainPct === 'number' && item.avgFpsGainPct > 0 && (
                       <div className="text-xs text-brand-600 dark:text-brand-400 font-semibold">
-                        Avg FPS: +{item.avgFpsGainPct}%
+                        {item.avgFpsGainLabel ?? 'Avg FPS'}: +{item.avgFpsGainPct}%
                       </div>
                     )}
                     {item.partType === 'GPU' && item.confidence && item.confidence !== 'confirmed' && (

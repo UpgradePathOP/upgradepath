@@ -95,6 +95,7 @@ export interface PartPick {
   price: number;
   avgFpsGainPct?: number;
   avgFpsGainRangePct?: { min: number; max: number };
+  avgFpsGainLabel?: string;
   label?: string;
   estimated?: boolean;
   confidence?: 'confirmed' | 'estimated' | 'speculative';

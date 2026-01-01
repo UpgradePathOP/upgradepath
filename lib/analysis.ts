@@ -514,7 +514,8 @@ function suggestParts(
   gamesProfiles: GameProfile[],
   baseline: AggregateMetrics,
   referenceMap: Record<string, FpsReference>,
-  isTargetLimited: boolean
+  isTargetLimited: boolean,
+  useRawPotentialLabel: boolean
 ): PartPick[] {
   const limit = budgetLimit[input.budgetBucket];
   const targetGain = category === 'CPU' ? 6 : 8;
@@ -680,6 +681,7 @@ function suggestParts(
       label,
       price: g.price,
       avgFpsGainPct,
+      avgFpsGainLabel: useRawPotentialLabel ? 'Raw GPU potential' : 'Avg FPS',
       estimated: candidate.estimated || isUnvalidated,
       confidence: candidate.confidence,
       qualitativeBullets: bullets.slice(0, 2),
@@ -846,6 +848,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     input.refreshRate >= 144 &&
     (baselineAgg.targetLimitedShare >= 0.6 || maxPotentialAgg.fpsTypicalAvg < input.refreshRate * 0.85);
   const verdictBoundType: BottleneckType = targetLimited ? 'TARGET_LIMITED' : baselineAgg.boundType;
+  const useRawPotentialLabel = verdictBoundType === 'TARGET_LIMITED' && reachCount === 0;
   const isTargetLimited = verdictBoundType === 'TARGET_LIMITED';
   const verdictConfidence = targetLimited
     ? clamp(
@@ -935,11 +938,31 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   const recommendedParts: AnalysisResult['recommendedParts'] = [
     {
       category: 'CPU',
-      items: suggestParts('CPU', input, cpu, gpu, selectedGames, baselineAgg, referenceMap, isTargetLimited)
+      items: suggestParts(
+        'CPU',
+        input,
+        cpu,
+        gpu,
+        selectedGames,
+        baselineAgg,
+        referenceMap,
+        isTargetLimited,
+        useRawPotentialLabel
+      )
     },
     {
       category: 'GPU',
-      items: suggestParts('GPU', input, cpu, gpu, selectedGames, baselineAgg, referenceMap, isTargetLimited)
+      items: suggestParts(
+        'GPU',
+        input,
+        cpu,
+        gpu,
+        selectedGames,
+        baselineAgg,
+        referenceMap,
+        isTargetLimited,
+        useRawPotentialLabel
+      )
     },
     { category: 'RAM', items: suggestRam(input, cpu) },
     { category: 'Storage', items: suggestStorage(input) },
@@ -976,8 +999,11 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
         }
       } else if (u.category === 'GPU') {
         const gpuRange = estimateRange(recommendedParts.find(p => p.category === 'GPU')?.items ?? []);
+        const gainLabel = useRawPotentialLabel ? 'Raw GPU potential' : 'Estimated avg FPS gain';
         impactSummary = gpuRange
-          ? `Estimated avg FPS gain: ${gpuRange}`
+          ? `${gainLabel}: ${gpuRange}`
+          : useRawPotentialLabel
+          ? 'Raw GPU potential varies by title.'
           : 'Estimated avg FPS gain varies by title.';
         reasons.push(
           verdictBoundType === 'TARGET_LIMITED'
@@ -1020,7 +1046,9 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
           name: item.name,
           price: item.price,
           impactSummary: item.avgFpsGainPct
-            ? `${item.estimated ? 'Estimated ' : ''}~+${item.avgFpsGainPct}% avg FPS`
+            ? useRawPotentialLabel
+              ? `Raw GPU potential: ~+${item.avgFpsGainPct}%`
+              : `${item.estimated ? 'Estimated ' : ''}~+${item.avgFpsGainPct}% avg FPS`
             : item.confidence === 'speculative'
             ? 'Speculative performance (no benchmarks)'
             : 'Estimated impact (limited data)',
@@ -1059,9 +1087,15 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
 
     if (bestGroup.category === 'GPU') {
       if (top.avgFpsGainPct) {
-        impactSummary = `Estimated avg FPS gain: ~+${top.avgFpsGainPct}%`;
+        impactSummary = useRawPotentialLabel
+          ? `Raw GPU potential: ~+${top.avgFpsGainPct}%`
+          : `Estimated avg FPS gain: ~+${top.avgFpsGainPct}%`;
       } else {
-        impactSummary = range ? `Estimated avg FPS gain: ${range}` : 'Estimated avg FPS gain varies by title.';
+        impactSummary = range
+          ? `${useRawPotentialLabel ? 'Raw GPU potential' : 'Estimated avg FPS gain'}: ${range}`
+          : useRawPotentialLabel
+          ? 'Raw GPU potential varies by title.'
+          : 'Estimated avg FPS gain varies by title.';
       }
       reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
       reasons.push(
