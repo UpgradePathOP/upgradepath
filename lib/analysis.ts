@@ -265,6 +265,16 @@ const getCuratedOverlapAverage = (
       count += 1;
     }
   }
+  const orderedUpgradePath = (() => {
+    const preferred = bestValue.category;
+    if (!['GPU', 'CPU', 'RAM', 'Storage', 'Monitor'].includes(preferred)) {
+      return upgradePath;
+    }
+    const idx = upgradePath.findIndex(item => item.category === preferred);
+    if (idx <= 0) return upgradePath;
+    return [upgradePath[idx], ...upgradePath.slice(0, idx), ...upgradePath.slice(idx + 1)];
+  })();
+
   return {
     baselineAvg: count > 0 ? baselineTotal / count : 0,
     candidateAvg: count > 0 ? candidateTotal / count : 0,
@@ -1326,7 +1336,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
       reasons: bestValue.reasons.slice(0, 3),
       options: bestValue.options
     },
-    upgradePath,
+    upgradePath: orderedUpgradePath,
     recommendedParts,
     warnings: [...fallbackWarnings, ...warnings]
   };
