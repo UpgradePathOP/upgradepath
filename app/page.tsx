@@ -195,6 +195,10 @@ export default function Page() {
     if (!result || !lastInput) return;
     const cpuName = cpus.find(c => c.id === lastInput.cpuId)?.name ?? lastInput.cpuId;
     const gpuName = gpus.find(g => g.id === lastInput.gpuId)?.name ?? lastInput.gpuId;
+    const gameNames = lastInput.games
+      .map(id => games.find(g => g.id === id)?.name ?? id)
+      .filter(Boolean)
+      .join(', ');
     const verdictLabel =
       result.verdict.boundType === 'CPU_BOUND'
         ? 'CPU-limited'
@@ -203,11 +207,17 @@ export default function Page() {
         : result.verdict.boundType === 'TARGET_LIMITED'
         ? 'Target-limited'
         : 'Mixed';
+    const targetLine = result.verdict.reasons.find(reason => /\d+\/\d+/.test(reason) && /reach/i.test(reason));
+    const rawPotential =
+      result.bestValue.impactSummary.toLowerCase().includes('raw gpu potential') ||
+      (result.bestValue.options ?? []).some(option => option.impactSummary.toLowerCase().includes('raw gpu potential'));
     const text = `
 UpgradePath Analysis
 System: ${cpuName} + ${gpuName}
 RAM: ${lastInput.ramAmount}GB ${lastInput.ramSpeed} | Storage: ${lastInput.storageType}
 Display: ${lastInput.resolution} @ ${lastInput.refreshRate}Hz | Budget: ${lastInput.budgetBucket}
+Games: ${gameNames || 'None selected'}
+${targetLine ? `Target: ${lastInput.refreshRate}Hz | ${targetLine}` : ''}
 
 Verdict: ${verdictLabel}
 ${result.verdict.reasons.map(r => `- ${r}`).join('\n')}
@@ -217,6 +227,7 @@ ${result.bestValue.reasons.map(r => `- ${r}`).join('\n')}
 ${result.bestValue.options?.length ? `
 Top GPU picks:
 ${result.bestValue.options.map(o => `- ${o.label}: ${o.name} ($${o.price}) ${o.impactSummary}`).join('\n')}` : ''}
+${rawPotential ? `\nNote: Raw GPU potential shown because the target is not reachable.` : ''}
 
 Upgrade Path:
 ${result.upgradePath.map((u, i) => `${i + 1}. ${u.category} (${u.impactSummary})`).join('\n')}
