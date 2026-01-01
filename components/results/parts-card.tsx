@@ -77,7 +77,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                   )}
                   <div className="mt-3">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-muted mb-2">
-                      Buy options (support this project){hasSearch ? ' · search links' : ''}
+                      Buy options (support this project)
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {links.map(link => (
