@@ -232,6 +232,33 @@ function lookupCuratedFps(gpuId: string, gameId: string, resolution: Resolution,
   return typeof fps === 'number' ? fps : null;
 }
 
+const getCuratedOverlapAverage = (
+  baselineGpuId: string,
+  candidateGpuId: string,
+  input: AnalysisInput,
+  gamesProfiles: GameProfile[]
+) => {
+  let baselineTotal = 0;
+  let candidateTotal = 0;
+  let count = 0;
+  for (const game of gamesProfiles) {
+    const category = resolveCategory(game);
+    const quality: QualitySetting = category === 'ESPORTS' ? 'low' : 'ultra';
+    const baselineFps = lookupCuratedFps(baselineGpuId, game.id, input.resolution, quality);
+    const candidateFps = lookupCuratedFps(candidateGpuId, game.id, input.resolution, quality);
+    if (typeof baselineFps === 'number' && typeof candidateFps === 'number') {
+      baselineTotal += baselineFps;
+      candidateTotal += candidateFps;
+      count += 1;
+    }
+  }
+  return {
+    baselineAvg: count > 0 ? baselineTotal / count : 0,
+    candidateAvg: count > 0 ? candidateTotal / count : 0,
+    count
+  };
+};
+
 const CURATED_ANCHORS = buildCuratedAnchors();
 
 function buildCuratedAnchors() {
@@ -572,6 +599,8 @@ function suggestParts(
     const utilityGain = Math.max(0, Math.round(rawUtilityGain));
     const rawScore = candidateAgg.fpsTypicalAvg;
     const perfScore = gpuPerfIndex(g, input.resolution);
+    const overlap = getCuratedOverlapAverage(gpu.id, g.id, input, gamesProfiles);
+    const slowerThanBaseline = overlap.count >= 2 && overlap.candidateAvg <= overlap.baselineAvg * 1.02;
     const confidence: PartPick['confidence'] =
       candidateAgg.curatedCount === gamesProfiles.length
         ? 'confirmed'
@@ -594,6 +623,7 @@ function suggestParts(
       rawUtilityGain,
       rawScore,
       perfScore,
+      slowerThanBaseline,
       estimated,
       confidence,
       isCuratedGpu,
@@ -618,7 +648,7 @@ function suggestParts(
     candidate.balanceScore = candidate.rawAvgGain / Math.sqrt(Math.max(candidate.gpu.price, 1));
   });
 
-  const improving = candidates.filter(c => c.rawAvgGain > 1);
+  const improving = candidates.filter(c => c.rawAvgGain > 1 && !c.slowerThanBaseline);
   const usable = improving.length ? improving : [];
   if (usable.length === 0) return [];
 
@@ -851,7 +881,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     input.refreshRate >= 144 &&
     (baselineAgg.targetLimitedShare >= 0.6 || maxPotentialAgg.fpsTypicalAvg < input.refreshRate * 0.85);
   const verdictBoundType: BottleneckType = targetLimited ? 'TARGET_LIMITED' : baselineAgg.boundType;
-  const useRawPotentialLabel = verdictBoundType === 'TARGET_LIMITED' && reachCount === 0;
+  const useRawPotentialLabel = verdictBoundType === 'TARGET_LIMITED' && refreshLimitedShare < 0.5;
   const isTargetLimited = verdictBoundType === 'TARGET_LIMITED';
   const verdictConfidence = targetLimited
     ? clamp(
