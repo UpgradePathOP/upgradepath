@@ -492,7 +492,8 @@ function suggestParts(
   gpu: Gpu,
   gamesProfiles: GameProfile[],
   baseline: AggregateMetrics,
-  referenceMap: Record<string, FpsReference>
+  referenceMap: Record<string, FpsReference>,
+  isTargetLimited: boolean
 ): PartPick[] {
   const limit = budgetLimit[input.budgetBucket];
   const targetGain = category === 'CPU' ? 6 : 8;
@@ -544,7 +545,7 @@ function suggestParts(
     const candidateAgg = aggregateMetrics(cpu, g, input, gamesProfiles, referenceMap);
     const rawAvgGain = calcAvgFpsGainPct(baseline, candidateAgg);
     let avgGain = Math.max(0, Math.round(rawAvgGain));
-    if (baseline.targetLimitedShare > 0.5 && input.refreshRate >= 144) {
+    if (isTargetLimited) {
       avgGain = Math.min(Math.round(avgGain * 0.6), 80);
     }
     const rawUtilityGain = calcUtilityGainPct(baseline, candidateAgg);
@@ -608,7 +609,7 @@ function suggestParts(
     const isUnvalidated = !candidate.isCuratedGpu;
     const avgFpsGainPct = candidate.confidence === 'speculative' ? undefined : candidate.avgGain;
     const bullets: string[] = [];
-    if (baseline.boundType === 'GPU_BOUND' && baseline.targetLimitedShare <= 0.5) {
+    if (baseline.boundType === 'GPU_BOUND' && !isTargetLimited) {
       bullets.push('Largest FPS gains for your selection.');
     }
     if (g.vram > gpu.vram) {
@@ -620,7 +621,7 @@ function suggestParts(
     if (gpuHeavyCount > 0) {
       bullets.push('Stronger GPU headroom for visually demanding titles.');
     }
-    if (baseline.targetLimitedShare > 0.5 && input.refreshRate >= 144) {
+    if (isTargetLimited) {
       bullets.push('Refresh target likely exceeds achievable FPS in these titles.');
     }
     const targetFps = input.refreshRate;
@@ -786,6 +787,13 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     ])
   );
 
+  const reachCount =
+    input.refreshRate > 0
+      ? baselineAgg.perGame.filter(g => g.fpsTypical >= input.refreshRate * 0.98).length
+      : 0;
+  const refreshLimitedShare =
+    baselineAgg.perGame.length > 0 ? reachCount / baselineAgg.perGame.length : 0;
+
   const budgetCap = budgetLimit[input.budgetBucket];
   const bestGpuCandidate =
     (gpus as Gpu[])
@@ -796,6 +804,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     input.refreshRate >= 144 &&
     (baselineAgg.targetLimitedShare >= 0.6 || maxPotentialAgg.fpsTypicalAvg < input.refreshRate * 0.85);
   const verdictBoundType: BottleneckType = targetLimited ? 'TARGET_LIMITED' : baselineAgg.boundType;
+  const isTargetLimited = verdictBoundType === 'TARGET_LIMITED';
   const verdictConfidence = targetLimited
     ? clamp(
         0.65 +
@@ -811,6 +820,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     reasons.push(
       `Your ${input.refreshRate}Hz target is above expected FPS for most selected titles at ${input.resolution}.`
     );
+    reasons.push(`${reachCount}/${selectedGames.length} titles are likely to reach ${input.refreshRate} FPS.`);
     reasons.push('At very high refresh targets, CPU/engine limits matter as much as GPU power.');
     reasons.push('Expect diminishing returns at this display target.');
   } else if (baselineAgg.boundType === 'CPU_BOUND') {
@@ -881,8 +891,14 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   upgrades.sort((a, b) => b.priority - a.priority);
 
   const recommendedParts: AnalysisResult['recommendedParts'] = [
-    { category: 'CPU', items: suggestParts('CPU', input, cpu, gpu, selectedGames, baselineAgg, referenceMap) },
-    { category: 'GPU', items: suggestParts('GPU', input, cpu, gpu, selectedGames, baselineAgg, referenceMap) },
+    {
+      category: 'CPU',
+      items: suggestParts('CPU', input, cpu, gpu, selectedGames, baselineAgg, referenceMap, isTargetLimited)
+    },
+    {
+      category: 'GPU',
+      items: suggestParts('GPU', input, cpu, gpu, selectedGames, baselineAgg, referenceMap, isTargetLimited)
+    },
     { category: 'RAM', items: suggestRam(input, cpu) },
     { category: 'Storage', items: suggestStorage(input) },
     { category: 'Monitor', items: suggestMonitor(input, baselineAgg) }
@@ -1005,7 +1021,9 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
       reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
       reasons.push(
         verdictBoundType === 'TARGET_LIMITED'
-          ? 'Performance is capped by your display target in these titles.'
+          ? refreshLimitedShare >= 0.5
+            ? 'Performance is capped by your display refresh in these titles.'
+            : 'Performance is below your refresh target; GPU/CPU/engine limits dominate.'
           : baselineAgg.boundType === 'GPU_BOUND'
           ? 'GPU is the main limiter for your selected games.'
           : 'GPU gains are strong while CPU headroom remains.'
@@ -1042,7 +1060,38 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
 
   const warnings: string[] = [];
   if (baselineAgg.vramPressureAvg >= 60) {
-    warnings.push('Some modern games can exceed 6GB VRAM at high textures; 8GB helps at 1080p.');
+    const vramHeavySelected = selectedGames.some(
+      g => resolveHeaviness(g.vramHeaviness, g.vramHeavy ? 'HIGH' : 'MED') === 'HIGH'
+    );
+    let warnAt = input.resolution === '4K' ? 10 : input.resolution === '1440p' ? 8 : 6;
+    let okAt = input.resolution === '4K' ? 12 : input.resolution === '1440p' ? 10 : 8;
+    if (vramHeavySelected) {
+      warnAt += 2;
+      okAt += 2;
+    }
+    warnAt = Math.min(warnAt, 16);
+    okAt = Math.min(okAt, 16);
+    const currentVram = gpu.vram;
+    const recommendedVram = Math.max(
+      0,
+      ...(recommendedParts.find(p => p.category === 'GPU')?.items.map(item => GPU_MAP[item.id]?.vram ?? 0) ?? [])
+    );
+
+    if (currentVram < warnAt) {
+      if (recommendedVram >= okAt) {
+        warnings.push(
+          `Your current GPU has ${currentVram}GB VRAM; recommended picks with ${okAt}GB+ should reduce texture limits at ${input.resolution}.`
+        );
+      } else {
+        warnings.push(
+          `At ${input.resolution}, ${warnAt}GB+ VRAM is recommended for higher textures; your GPU has ${currentVram}GB.`
+        );
+      }
+    } else if (currentVram < okAt) {
+      warnings.push(
+        `At ${input.resolution}, ${okAt}GB+ VRAM is safer for high textures; ${currentVram}GB may require lowering settings in some titles.`
+      );
+    }
   }
   if (baselineAgg.stutterRiskAvg > 60 && input.storageType === 'HDD') {
     warnings.push('HDDs increase traversal stutter in streaming-heavy games; SSD recommended.');
