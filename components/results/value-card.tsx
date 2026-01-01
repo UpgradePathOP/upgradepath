@@ -2,6 +2,7 @@ import { AnalysisResult } from '@/lib/types';
 import { DollarSign } from 'lucide-react';
 
 export function ValueCard({ bestValue }: { bestValue: AnalysisResult['bestValue'] }) {
+  const isIneffective = bestValue.impactSummary.toLowerCase().includes('ineffective');
   return (
     <div className="bg-gradient-to-br from-brand-50 to-brand-100 dark:from-surface dark:to-[#111418] rounded-xl shadow-lg p-6 border border-brand-100 dark:border-border">
       <div className="flex items-start gap-3 mb-4">
@@ -9,7 +10,15 @@ export function ValueCard({ bestValue }: { bestValue: AnalysisResult['bestValue'
         <div>
           <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Best Value Upgrade</h3>
           <p className="text-2xl font-bold text-brand-700 dark:text-brand-400">{bestValue.category}</p>
-          <p className="text-sm text-brand-700 dark:text-brand-300 mt-1">{bestValue.impactSummary}</p>
+          <p
+            className={
+              isIneffective
+                ? 'text-sm text-danger-600 dark:text-danger-400 mt-1 font-semibold'
+                : 'text-sm text-brand-700 dark:text-brand-300 mt-1'
+            }
+          >
+            {bestValue.impactSummary}
+          </p>
         </div>
       </div>
       <div className="space-y-2">
