@@ -339,6 +339,7 @@ type GameMetrics = {
   gpuThroughput: number;
   engineCeiling: number;
   targetLimited: boolean;
+  gpuFps: number;
   fpsTypical: number;
   effectiveFps: number;
   stutterRisk: number;
@@ -348,7 +349,7 @@ type GameMetrics = {
 };
 
 type FpsReference = {
-  fpsTypical: number;
+  gpuFps: number;
   gpuIndexValue: number;
   source: FpsSource;
 };
@@ -375,9 +376,9 @@ function computeGameMetrics(
   let gpuFps = sample?.fps ?? baseFps * rawGpuIndex;
   let benchmarkSource: FpsSource = sample?.source ?? 'model';
 
-  if (!sample && reference && reference.gpuIndexValue > 0 && Number.isFinite(reference.fpsTypical)) {
+  if (!sample && reference && reference.gpuIndexValue > 0 && Number.isFinite(reference.gpuFps)) {
     const ratio = rawGpuIndex / reference.gpuIndexValue;
-    gpuFps = reference.fpsTypical * ratio;
+    gpuFps = reference.gpuFps * ratio;
     benchmarkSource = 'estimated';
   }
 
@@ -412,6 +413,7 @@ function computeGameMetrics(
     gpuThroughput: gpuIndexValue,
     engineCeiling,
     targetLimited,
+    gpuFps,
     fpsTypical,
     effectiveFps,
     stutterRisk,
@@ -426,6 +428,7 @@ type AggregateMetrics = {
   headroomRatio: number;
   boundType: BottleneckType;
   confidence: number;
+  gpuFpsAvg: number;
   fpsTypicalAvg: number;
   effectiveFpsAvg: number;
   stutterRiskAvg: number;
@@ -457,6 +460,7 @@ function aggregateMetrics(
     perGame.length > 0 ? perGame.filter(g => g.boundType === boundType).length / perGame.length : 0;
   const confidence = clamp(0.55 + Math.abs(Math.log(headroomRatio)) * 0.35 + matchRatio * 0.08, 0.55, 0.95);
 
+  const gpuFpsAvg = perGame.reduce((s, g) => s + g.gpuFps, 0) / perGame.length;
   const fpsTypicalAvg = perGame.reduce((s, g) => s + g.fpsTypical, 0) / perGame.length;
   const effectiveFpsAvg = perGame.reduce((s, g) => s + g.effectiveFps, 0) / perGame.length;
   const stutterRiskAvg = perGame.reduce((s, g) => s + g.stutterRisk, 0) / perGame.length;
@@ -472,6 +476,7 @@ function aggregateMetrics(
     headroomRatio,
     boundType,
     confidence,
+    gpuFpsAvg,
     fpsTypicalAvg,
     effectiveFpsAvg,
     stutterRiskAvg,
@@ -485,8 +490,8 @@ function aggregateMetrics(
 }
 
 const calcAvgFpsGainPct = (baseline: AggregateMetrics, candidate: AggregateMetrics) => {
-  const base = baseline.fpsTypicalAvg;
-  const next = candidate.fpsTypicalAvg;
+  const base = baseline.gpuFpsAvg;
+  const next = candidate.gpuFpsAvg;
   if (base <= 0) return 0;
   const floor = Math.max(base, 45);
   return ((next - base) / floor) * 100;
@@ -797,7 +802,7 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   const referenceMap: Record<string, FpsReference> = Object.fromEntries(
     baselineAgg.perGame.map(g => [
       g.game.id,
-      { fpsTypical: g.fpsTypical, gpuIndexValue: g.gpuIndexValue, source: g.benchmarkSource }
+      { gpuFps: g.gpuFps, gpuIndexValue: g.gpuIndexValue, source: g.benchmarkSource }
     ])
   );
 
