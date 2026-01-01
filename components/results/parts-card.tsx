@@ -145,7 +145,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                           href={link.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center rounded-full border border-slate-300/60 dark:border-border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-200 hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition"
+                          className="inline-flex items-center rounded-full border border-slate-300/60 dark:border-border bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-800 shadow-sm transition hover:border-brand-400 hover:bg-slate-200 hover:text-brand-700 hover:shadow-md dark:bg-slate-900/70 dark:text-slate-100 dark:hover:bg-slate-800 dark:hover:text-brand-200"
                         >
                           {link.label}
                         </a>
