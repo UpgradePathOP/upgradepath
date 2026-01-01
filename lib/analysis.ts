@@ -232,6 +232,19 @@ function lookupCuratedFps(gpuId: string, gameId: string, resolution: Resolution,
   return typeof fps === 'number' ? fps : null;
 }
 
+const getCuratedAverage = (gpuId: string, resolution: Resolution, quality: QualitySetting) => {
+  const byGpu = CURATED_FPS?.fps?.[quality]?.[resolution]?.[gpuId];
+  if (!byGpu) return null;
+  const values = Object.values(byGpu).filter(v => typeof v === 'number' && Number.isFinite(v));
+  if (values.length === 0) return null;
+  return values.reduce((s, v) => s + v, 0) / values.length;
+};
+
+const chooseQualityFallback = (gamesProfiles: GameProfile[]) => {
+  const esportsCount = gamesProfiles.filter(g => resolveCategory(g) === 'ESPORTS').length;
+  return esportsCount >= gamesProfiles.length / 2 ? 'low' : 'ultra';
+};
+
 const getCuratedOverlapAverage = (
   baselineGpuId: string,
   candidateGpuId: string,
@@ -597,6 +610,8 @@ function suggestParts(
 
   const gpuHeavyCount = gamesProfiles.filter(g => resolveTypicalBound(g) === 'GPU_HEAVY').length;
   const baselinePerfIndex = gpuPerfIndex(gpu, input.resolution);
+  const qualityFallback = chooseQualityFallback(gamesProfiles);
+  const baselineCuratedAvg = getCuratedAverage(gpu.id, input.resolution, qualityFallback);
   const baseList = (gpus as Gpu[]).filter(g => g.price <= limit && g.id !== gpu.id);
   const candidates = baseList.map(g => {
     const candidateAgg = aggregateMetrics(cpu, g, input, gamesProfiles, referenceMap);
@@ -607,7 +622,13 @@ function suggestParts(
     const rawScore = candidateAgg.fpsTypicalAvg;
     const perfScore = gpuPerfIndex(g, input.resolution);
     const overlap = getCuratedOverlapAverage(gpu.id, g.id, input, gamesProfiles);
-    const slowerThanBaseline = overlap.count >= 2 && overlap.candidateAvg <= overlap.baselineAvg * 1.02;
+    const candidateCuratedAvg = getCuratedAverage(g.id, input.resolution, qualityFallback);
+    const slowerThanBaseline =
+      overlap.count >= 2
+        ? overlap.candidateAvg <= overlap.baselineAvg * 1.02
+        : baselineCuratedAvg && candidateCuratedAvg
+        ? candidateCuratedAvg <= baselineCuratedAvg * 1.02
+        : perfScore <= baselinePerfIndex * 1.02;
     const confidence: PartPick['confidence'] =
       candidateAgg.curatedCount === gamesProfiles.length
         ? 'confirmed'
@@ -729,8 +750,9 @@ function suggestParts(
 
 function suggestRam(input: AnalysisInput, cpu: Cpu): PartPick[] {
   const speedLabel = input.ramSpeed.toUpperCase();
-  const memoryType =
+  const inferredType =
     speedLabel.includes('DDR5') ? 'DDR5' : speedLabel.includes('DDR4') ? 'DDR4' : cpu.memoryType;
+  const memoryType = inferredType === cpu.memoryType ? inferredType : cpu.memoryType;
   const kits = [
     { id: 'ram-16-3200', name: '16GB (2x8) DDR4-3200', price: 50, capacity: 16, type: 'DDR4' as const },
     { id: 'ram-32-3600', name: '32GB (2x16) DDR4-3600', price: 90, capacity: 32, type: 'DDR4' as const },
@@ -1247,6 +1269,14 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   }
   if (baselineAgg.stutterRiskAvg > 60 && input.storageType === 'HDD') {
     warnings.push('HDDs increase traversal stutter in streaming-heavy games; SSD recommended.');
+  }
+  const speedLabel = input.ramSpeed.toUpperCase();
+  const inferredType =
+    speedLabel.includes('DDR5') ? 'DDR5' : speedLabel.includes('DDR4') ? 'DDR4' : cpu.memoryType;
+  if (inferredType !== cpu.memoryType) {
+    warnings.push(
+      `Memory type mismatch: ${cpu.name} supports ${cpu.memoryType}, but your RAM selection indicates ${inferredType}.`
+    );
   }
   if (input.ramAmount === 8) {
     warnings.push('8GB RAM is below recommended; expect stutter in modern titles.');
