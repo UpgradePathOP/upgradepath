@@ -44,9 +44,11 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                       {item.label}
                     </p>
                   )}
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{item.name}</span>
-                    <span className="text-xs text-slate-600 dark:text-slate-300">${item.price}</span>
+                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      ${item.price}
+                    </span>
                   </div>
                   <div className="mt-1 space-y-1">
                     {item.partType === 'GPU' && typeof item.avgFpsGainPct === 'number' && item.avgFpsGainPct > 0 && (
