@@ -1120,22 +1120,28 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
       const reasons: string[] = [];
       let impactSummary = '';
 
-      if (bestGroup.category === 'GPU') {
-        if (top.avgFpsGainPct) {
-          impactSummary = useRawPotentialLabel
-            ? `Raw GPU potential: ~+${top.avgFpsGainPct}%`
-            : `Estimated avg FPS gain: ~+${top.avgFpsGainPct}%`;
+    if (bestGroup.category === 'GPU') {
+      if (top.avgFpsGainPct) {
+        if (useRawPotentialLabel) {
+          impactSummary = `Large raw uplift, but ineffective for ${input.resolution} @ ${input.refreshRate}Hz`;
+          reasons.push(`Raw GPU potential: ~+${top.avgFpsGainPct}%`);
         } else {
-          impactSummary = range
-            ? `${useRawPotentialLabel ? 'Raw GPU potential' : 'Estimated avg FPS gain'}: ${range}`
-            : useRawPotentialLabel
-            ? 'Raw GPU potential varies by title.'
-            : 'Estimated avg FPS gain varies by title.';
+          impactSummary = `Estimated avg FPS gain: ~+${top.avgFpsGainPct}%`;
         }
-        reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
-        reasons.push(
-          verdictBoundType === 'TARGET_LIMITED'
-            ? refreshLimitedShare >= 0.5
+      } else {
+        if (useRawPotentialLabel) {
+          impactSummary = `Large raw uplift, but ineffective for ${input.resolution} @ ${input.refreshRate}Hz`;
+          if (range) {
+            reasons.push(`Raw GPU potential: ${range}`);
+          }
+        } else {
+          impactSummary = range ? `Estimated avg FPS gain: ${range}` : 'Estimated avg FPS gain varies by title.';
+        }
+      }
+      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+      reasons.push(
+        verdictBoundType === 'TARGET_LIMITED'
+          ? refreshLimitedShare >= 0.5
               ? 'Performance is capped by your display refresh in these titles.'
               : 'Performance is below your refresh target; GPU/CPU/engine limits dominate.'
             : baselineAgg.boundType === 'GPU_BOUND'
