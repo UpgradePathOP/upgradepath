@@ -160,19 +160,6 @@ const resolveWeights = (game: GameProfile) => {
   return { cpu, gpu };
 };
 
-const refreshInfluence = (
-  refreshRate: number,
-  gpuFps: number,
-  category: GameCategory,
-  targetFps: GameProfile['targetFPS']
-) => {
-  if (!Number.isFinite(gpuFps) || refreshRate <= 60) return 0;
-  const ratio = gpuFps / Math.max(refreshRate, 1);
-  const normalized = clamp((ratio - 0.7) / 0.5, 0, 1);
-  const focus = category === 'ESPORTS' || targetFps === 'high' ? 1 : targetFps === 'medium' ? 0.5 : 0.25;
-  return normalized * focus;
-};
-
 const getVramPressure = (vram: number, input: AnalysisInput, vramHeaviness: Heaviness) => {
   const tier = vram >= 16 ? 16 : vram >= 12 ? 12 : vram >= 8 ? 8 : vram >= 6 ? 6 : 4;
   const baseTable: Record<Heaviness, Record<number, number>> = {
@@ -379,14 +366,10 @@ function computeGameMetrics(
     benchmarkSource = 'estimated';
   }
 
-  const refreshScale = refreshDemand(input.refreshRate);
-  const refreshWeight = refreshInfluence(input.refreshRate, gpuFps, category, game.targetFPS);
-  const refreshPenalty = 1 + (refreshScale - 1) * refreshWeight;
-
   const cpuThroughputBase =
     (cpuIndex(cpu.score) * CPU_CAP_TUNE[category]) /
     ((0.6 + weights.cpu) * (typicalBound === 'CPU_HEAVY' ? 1.08 : 1));
-  const cpuThroughput = cpuThroughputBase / refreshPenalty;
+  const cpuThroughput = cpuThroughputBase;
   const headroomRatio = cpuThroughput / gpuIndexValue;
   const boundType = classifyHeadroom(headroomRatio);
   const confidence = bottleneckConfidence(headroomRatio, typicalBound, boundType);
@@ -625,7 +608,7 @@ function suggestParts(
     const isUnvalidated = !candidate.isCuratedGpu;
     const avgFpsGainPct = candidate.confidence === 'speculative' ? undefined : candidate.avgGain;
     const bullets: string[] = [];
-    if (baseline.boundType === 'GPU_BOUND') {
+    if (baseline.boundType === 'GPU_BOUND' && baseline.targetLimitedShare <= 0.5) {
       bullets.push('Largest FPS gains for your selection.');
     }
     if (g.vram > gpu.vram) {
