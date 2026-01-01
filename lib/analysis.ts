@@ -1134,7 +1134,15 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   const storageHelpful = input.storageType === 'HDD' && storagePick.length > 0;
   const noMeaningfulGpu = bestGpuGain > 0 ? bestGpuGain < 12 : true;
   const topCategory = upgradePath[0]?.category;
+  const preferredCategory =
+    verdictBoundType === 'GPU_BOUND' && !noMeaningfulGpu
+      ? 'GPU'
+      : verdictBoundType === 'CPU_BOUND'
+      ? 'CPU'
+      : null;
+  const preferredGroup = preferredCategory ? groupsWithItems.find(g => g.category === preferredCategory) : null;
   const bestGroup =
+    preferredGroup ||
     (topCategory && groupsWithItems.find(g => g.category === topCategory)) ||
     (upgradePath.length === 0 ? groupsWithItems.find(g => g.category === 'Storage') : null) ||
     groupsWithItems.find(g => g.category === 'GPU') ||
