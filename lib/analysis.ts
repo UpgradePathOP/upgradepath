@@ -691,6 +691,9 @@ function suggestParts(
 }
 
 function suggestRam(input: AnalysisInput, cpu: Cpu): PartPick[] {
+  const speedLabel = input.ramSpeed.toUpperCase();
+  const memoryType =
+    speedLabel.includes('DDR5') ? 'DDR5' : speedLabel.includes('DDR4') ? 'DDR4' : cpu.memoryType;
   const kits = [
     { id: 'ram-16-3200', name: '16GB (2x8) DDR4-3200', price: 50, capacity: 16, type: 'DDR4' as const },
     { id: 'ram-32-3600', name: '32GB (2x16) DDR4-3600', price: 90, capacity: 32, type: 'DDR4' as const },
@@ -701,7 +704,7 @@ function suggestRam(input: AnalysisInput, cpu: Cpu): PartPick[] {
   const budgetLimitVal = budgetLimit[input.budgetBucket];
   const matches = kits
     .filter(k => (needMore ? k.capacity >= needMore : k.capacity > currentCapacity))
-    .filter(k => k.type === cpu.memoryType)
+    .filter(k => k.type === memoryType)
     .filter(k => k.price <= budgetLimitVal)
     .slice(0, 2);
     return matches.map((k): PartPick => {
@@ -1057,6 +1060,11 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
         }))
       : null;
   const groupsWithItems = recommendedParts.filter(group => group.items.length > 0);
+  const bestGpuGain = gpuPickItems.length > 0 ? Math.max(...gpuPickItems.map(p => p.avgFpsGainPct ?? 0)) : 0;
+  const ramConstrained = input.ramAmount < 16;
+  const storagePick = recommendedParts.find(p => p.category === 'Storage')?.items ?? [];
+  const storageHelpful = input.storageType === 'HDD' && storagePick.length > 0;
+  const noMeaningfulGpu = bestGpuGain > 0 ? bestGpuGain < 8 : true;
   const topCategory = upgradePath[0]?.category;
   const bestGroup =
     (topCategory && groupsWithItems.find(g => g.category === topCategory)) ||
@@ -1070,71 +1078,99 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
     reasons: ['Adjusting settings may yield better returns than new hardware'],
     options: undefined
   };
+  let bestValueLocked = false;
 
   if (bestGroup && bestItems.length > 0) {
-    const sorted =
-      bestGroup.category === 'GPU'
-        ? [...bestItems].sort((a, b) => (b.avgFpsGainPct ?? 0) - (a.avgFpsGainPct ?? 0))
-        : [...bestItems];
-    const valuePick =
-      bestGroup.category === 'GPU'
-        ? bestItems.find(item => (item.label ?? '').toLowerCase().includes('best value'))
-        : undefined;
-    const top = valuePick ?? sorted[0];
-    const range = bestGroup.category === 'GPU' ? estimateRange(bestItems) : null;
-    const reasons: string[] = [];
-    let impactSummary = '';
-
-    if (bestGroup.category === 'GPU') {
-      if (top.avgFpsGainPct) {
-        impactSummary = useRawPotentialLabel
-          ? `Raw GPU potential: ~+${top.avgFpsGainPct}%`
-          : `Estimated avg FPS gain: ~+${top.avgFpsGainPct}%`;
+    if (bestGroup.category === 'RAM' && !ramConstrained && noMeaningfulGpu) {
+      if (storageHelpful) {
+        bestValue = {
+          category: 'Storage',
+          impactSummary: 'Faster loads + less traversal hitching',
+          reasons: [
+            `Best pick in budget: ${storagePick[0].name} ($${storagePick[0].price})`,
+            'SSD upgrades are the most noticeable quality-of-life change.',
+            'FPS gains are typically small, but load times improve.'
+          ],
+          options: undefined
+        };
       } else {
-        impactSummary = range
-          ? `${useRawPotentialLabel ? 'Raw GPU potential' : 'Estimated avg FPS gain'}: ${range}`
-          : useRawPotentialLabel
-          ? 'Raw GPU potential varies by title.'
-          : 'Estimated avg FPS gain varies by title.';
+        bestValue = {
+          category: 'No cost-effective upgrade',
+          impactSummary: 'No meaningful FPS gains within budget',
+          reasons: [
+            'Current GPU tier exceeds the budget for meaningful FPS gains.',
+            'Consider saving for a GPU upgrade or lowering resolution/target.'
+          ],
+          options: undefined
+        };
       }
-      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
-      reasons.push(
-        verdictBoundType === 'TARGET_LIMITED'
-          ? refreshLimitedShare >= 0.5
-            ? 'Performance is capped by your display refresh in these titles.'
-            : 'Performance is below your refresh target; GPU/CPU/engine limits dominate.'
-          : baselineAgg.boundType === 'GPU_BOUND'
-          ? 'GPU is the main limiter for your selected games.'
-          : 'GPU gains are strong while CPU headroom remains.'
-      );
-      if (top.qualitativeBullets[0]) reasons.push(top.qualitativeBullets[0]);
-    } else if (bestGroup.category === 'CPU') {
-      impactSummary =
-        baselineAgg.boundType === 'CPU_BOUND'
-          ? 'Modest avg FPS gains in CPU-limited titles'
-          : 'Better high-refresh headroom; modest avg FPS change';
-      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
-      reasons.push('CPU upgrades help most when targeting high refresh or esports titles.');
-    } else if (bestGroup.category === 'RAM') {
-      impactSummary = 'Improves stability in modern titles; small avg FPS change';
-      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
-      reasons.push('More RAM reduces paging in memory-heavy scenes.');
-    } else if (bestGroup.category === 'Storage') {
-      impactSummary = 'Faster loads + less traversal hitching';
-      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
-      reasons.push('SSD upgrades are the most noticeable quality-of-life change.');
-    } else if (bestGroup.category === 'Monitor') {
-      impactSummary = 'Matches estimated FPS ceiling for consistent output';
-      reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
-      reasons.push('Higher refresh only helps when FPS can sustain it.');
+      bestValueLocked = true;
     }
+    if (!bestValueLocked) {
+      const sorted =
+        bestGroup.category === 'GPU'
+          ? [...bestItems].sort((a, b) => (b.avgFpsGainPct ?? 0) - (a.avgFpsGainPct ?? 0))
+          : [...bestItems];
+      const valuePick =
+        bestGroup.category === 'GPU'
+          ? bestItems.find(item => (item.label ?? '').toLowerCase().includes('best value'))
+          : undefined;
+      const top = valuePick ?? sorted[0];
+      const range = bestGroup.category === 'GPU' ? estimateRange(bestItems) : null;
+      const reasons: string[] = [];
+      let impactSummary = '';
 
-    bestValue = {
-      category: bestGroup.category,
-      impactSummary,
-      reasons: reasons.slice(0, 3),
-      options: gpuChoiceOptions ?? undefined
-    };
+      if (bestGroup.category === 'GPU') {
+        if (top.avgFpsGainPct) {
+          impactSummary = useRawPotentialLabel
+            ? `Raw GPU potential: ~+${top.avgFpsGainPct}%`
+            : `Estimated avg FPS gain: ~+${top.avgFpsGainPct}%`;
+        } else {
+          impactSummary = range
+            ? `${useRawPotentialLabel ? 'Raw GPU potential' : 'Estimated avg FPS gain'}: ${range}`
+            : useRawPotentialLabel
+            ? 'Raw GPU potential varies by title.'
+            : 'Estimated avg FPS gain varies by title.';
+        }
+        reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+        reasons.push(
+          verdictBoundType === 'TARGET_LIMITED'
+            ? refreshLimitedShare >= 0.5
+              ? 'Performance is capped by your display refresh in these titles.'
+              : 'Performance is below your refresh target; GPU/CPU/engine limits dominate.'
+            : baselineAgg.boundType === 'GPU_BOUND'
+            ? 'GPU is the main limiter for your selected games.'
+            : 'GPU gains are strong while CPU headroom remains.'
+        );
+        if (top.qualitativeBullets[0]) reasons.push(top.qualitativeBullets[0]);
+      } else if (bestGroup.category === 'CPU') {
+        impactSummary =
+          baselineAgg.boundType === 'CPU_BOUND'
+            ? 'Modest avg FPS gains in CPU-limited titles'
+            : 'Better high-refresh headroom; modest avg FPS change';
+        reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+        reasons.push('CPU upgrades help most when targeting high refresh or esports titles.');
+      } else if (bestGroup.category === 'RAM') {
+        impactSummary = 'Improves stability in modern titles; small avg FPS change';
+        reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+        reasons.push('More RAM reduces paging in memory-heavy scenes.');
+      } else if (bestGroup.category === 'Storage') {
+        impactSummary = 'Faster loads + less traversal hitching';
+        reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+        reasons.push('SSD upgrades are the most noticeable quality-of-life change.');
+      } else if (bestGroup.category === 'Monitor') {
+        impactSummary = 'Matches estimated FPS ceiling for consistent output';
+        reasons.push(`Best pick in budget: ${top.name} ($${top.price})`);
+        reasons.push('Higher refresh only helps when FPS can sustain it.');
+      }
+
+      bestValue = {
+        category: bestGroup.category,
+        impactSummary,
+        reasons: reasons.slice(0, 3),
+        options: gpuChoiceOptions ?? undefined
+      };
+    }
   }
 
   const warnings: string[] = [];
