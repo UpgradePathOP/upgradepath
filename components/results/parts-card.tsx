@@ -50,7 +50,28 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
               <p className="text-sm text-slate-500 dark:text-muted">No clear upgrade within budget.</p>
             )}
             <div className="space-y-2">
-              {group.items.map(item => {
+              {(() => {
+                const categoryOrder =
+                  group.category === 'GPU'
+                    ? ['Fastest within budget', 'Best value per dollar', 'Balanced']
+                    : [];
+                const orderedItems =
+                  group.category === 'GPU'
+                    ? [...group.items].sort((a, b) => {
+                        const aRank = categoryOrder.findIndex(label =>
+                          (a.label ?? '').toLowerCase().includes(label.toLowerCase())
+                        );
+                        const bRank = categoryOrder.findIndex(label =>
+                          (b.label ?? '').toLowerCase().includes(label.toLowerCase())
+                        );
+                        const aPos = aRank === -1 ? Number.POSITIVE_INFINITY : aRank;
+                        const bPos = bRank === -1 ? Number.POSITIVE_INFINITY : bRank;
+                        if (aPos !== bPos) return aPos - bPos;
+                        return 0;
+                      })
+                    : group.items;
+
+                return orderedItems.map(item => {
                 const links = getAffiliateLinks(item);
                 const hasSearch = links.some(link => link.kind === 'search');
                 const labelText = (item.label ?? '').toLowerCase();
@@ -71,7 +92,9 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                   : isBalanced
                   ? 'text-slate-500 dark:text-slate-400'
                   : 'text-brand-600 dark:text-brand-400';
-                const cardTone = isBest
+                const cardTone = isFast
+                  ? 'border border-sky-500/40 dark:border-sky-500/30 bg-sky-50/40 dark:bg-sky-500/5 ring-1 ring-sky-500/10'
+                  : isBest
                   ? 'border border-brand-500/40 dark:border-brand-500/30 bg-brand-50/50 dark:bg-brand-500/5 ring-1 ring-brand-500/10'
                   : 'border border-slate-200/60 dark:border-border bg-slate-50 dark:bg-surface/70';
                 return (
@@ -132,9 +155,10 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                       ))}
                     </div>
                   </div>
-                </div>
-              );
-              })}
+                  </div>
+                );
+              });
+              })()}
             </div>
           </div>
         ))}
