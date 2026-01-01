@@ -3,6 +3,19 @@ import { AnalysisResult } from '@/lib/types';
 import { HardDrive, Cpu, Monitor, MemoryStick } from 'lucide-react';
 
 export function PartsCard({ recommendations }: { recommendations: AnalysisResult['recommendedParts'] }) {
+  const categoryOrder = ['GPU', 'CPU', 'RAM', 'Storage', 'Monitor'];
+  const orderedRecommendations = recommendations
+    .map((group, idx) => ({ group, idx }))
+    .sort((a, b) => {
+      const aPos = categoryOrder.indexOf(a.group.category);
+      const bPos = categoryOrder.indexOf(b.group.category);
+      const aRank = aPos === -1 ? Number.POSITIVE_INFINITY : aPos;
+      const bRank = bPos === -1 ? Number.POSITIVE_INFINITY : bPos;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.idx - b.idx;
+    })
+    .map(entry => entry.group);
+
   const iconFor = (category: string) => {
     if (category === 'CPU') return <Cpu className="w-4 h-4" />;
     if (category === 'GPU') return <Monitor className="w-4 h-4" />;
@@ -24,7 +37,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
         </p>
       </div>
       <div className="columns-1 md:columns-2 [column-gap:1rem]">
-        {recommendations.map(group => (
+        {orderedRecommendations.map(group => (
           <div
             key={group.category}
             className="mb-4 break-inside-avoid border border-slate-200 dark:border-border rounded-lg p-4 h-fit"
