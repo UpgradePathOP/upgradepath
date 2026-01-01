@@ -175,6 +175,20 @@ const resolveWeights = (game: GameProfile) => {
   return { cpu, gpu };
 };
 
+const resolveMemoryType = (input: AnalysisInput, cpu: Cpu) => {
+  const speedLabel = input.ramSpeed.toUpperCase();
+  if (speedLabel.includes('DDR5')) return 'DDR5';
+  if (speedLabel.includes('DDR4')) return 'DDR4';
+  return cpu.memoryType;
+};
+
+const cpuSupportsMemoryType = (cpu: Cpu, memoryType: string) => {
+  if (cpu.socket === 'LGA1700') return true;
+  if (cpu.socket === 'AM5') return memoryType === 'DDR5';
+  if (cpu.socket === 'AM4') return memoryType === 'DDR4';
+  return cpu.memoryType === memoryType;
+};
+
 const getVramPressure = (vram: number, input: AnalysisInput, vramHeaviness: Heaviness) => {
   const tier = vram >= 16 ? 16 : vram >= 12 ? 12 : vram >= 8 ? 8 : vram >= 6 ? 6 : 4;
   const baseTable: Record<Heaviness, Record<number, number>> = {
@@ -758,10 +772,7 @@ function suggestParts(
 }
 
 function suggestRam(input: AnalysisInput, cpu: Cpu): PartPick[] {
-  const speedLabel = input.ramSpeed.toUpperCase();
-  const inferredType =
-    speedLabel.includes('DDR5') ? 'DDR5' : speedLabel.includes('DDR4') ? 'DDR4' : cpu.memoryType;
-  const memoryType = inferredType === cpu.memoryType ? inferredType : cpu.memoryType;
+  const memoryType = resolveMemoryType(input, cpu);
   const kits = [
     { id: 'ram-16-3200', name: '16GB (2x8) DDR4-3200', price: 50, capacity: 16, type: 'DDR4' as const },
     { id: 'ram-32-3600', name: '32GB (2x16) DDR4-3600', price: 90, capacity: 32, type: 'DDR4' as const },
@@ -1287,10 +1298,8 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
   if (baselineAgg.stutterRiskAvg > 60 && input.storageType === 'HDD') {
     warnings.push('HDDs increase traversal stutter in streaming-heavy games; SSD recommended.');
   }
-  const speedLabel = input.ramSpeed.toUpperCase();
-  const inferredType =
-    speedLabel.includes('DDR5') ? 'DDR5' : speedLabel.includes('DDR4') ? 'DDR4' : cpu.memoryType;
-  if (inferredType !== cpu.memoryType) {
+  const inferredType = resolveMemoryType(input, cpu);
+  if (!cpuSupportsMemoryType(cpu, inferredType)) {
     warnings.push(
       `Memory type mismatch: ${cpu.name} supports ${cpu.memoryType}, but your RAM selection indicates ${inferredType}.`
     );
