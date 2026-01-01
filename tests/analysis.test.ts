@@ -97,12 +97,12 @@ describe('UpgradePath rules engine', () => {
     const perf120 =
       res120.recommendedParts
         .find(p => p.category === 'GPU')
-        ?.items.find(item => item.label === 'Best performance')
+        ?.items.find(item => item.label === 'Fastest within budget')
         ?.avgFpsGainPct ?? 0;
     const perf720 =
       res720.recommendedParts
         .find(p => p.category === 'GPU')
-        ?.items.find(item => item.label === 'Best performance')
+        ?.items.find(item => item.label === 'Fastest within budget')
         ?.avgFpsGainPct ?? 0;
 
     expect(perf120).toBeGreaterThan(0);
@@ -124,7 +124,7 @@ describe('UpgradePath rules engine', () => {
 
     const bestPerf = res.recommendedParts
       .find(p => p.category === 'GPU')
-      ?.items.find(item => item.label === 'Best performance');
+      ?.items.find(item => item.label === 'Fastest within budget');
     expect(bestPerf?.avgFpsGainPct ?? 0).toBeGreaterThan(10);
   });
 
@@ -149,11 +149,11 @@ describe('UpgradePath rules engine', () => {
 
     const options = res.bestValue.options ?? [];
     expect(options.length).toBeGreaterThanOrEqual(3);
-    const bestValue = options.find(o => o.label === 'Best value');
+    const bestValue = options.find(o => o.label === 'Best value per dollar');
     expect(bestValue).toBeTruthy();
     expect(bestValue?.price ?? 9999).toBeLessThan(800);
 
-    const bestPerf = gpuRecs.find(p => p.label === 'Best performance');
+    const bestPerf = gpuRecs.find(p => p.label === 'Fastest within budget');
     const maxPrice = Math.max(...gpuRecs.map(p => p.price));
     expect(bestPerf?.price).toBe(maxPrice);
   });

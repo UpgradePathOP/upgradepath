@@ -596,12 +596,12 @@ function suggestParts(
   const bestPerf = byPerf[0];
   if (bestPerf) {
     used.add(bestPerf.gpu.id);
-    picks.push({ label: 'Best performance', candidate: bestPerf });
+    picks.push({ label: 'Fastest within budget', candidate: bestPerf });
   }
-  addPick('Best value', byValue);
+  addPick('Best value per dollar', byValue);
   addPick('Balanced', byBalanced);
 
-  const labelOrder = ['Best value', 'Best performance', 'Balanced'];
+  const labelOrder = ['Best value per dollar', 'Fastest within budget', 'Balanced'];
   picks.sort((a, b) => labelOrder.indexOf(a.label) - labelOrder.indexOf(b.label));
 
   return picks.map(({ label, candidate }): PartPick => {
