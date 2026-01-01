@@ -625,9 +625,6 @@ function suggestParts(
     const isUnvalidated = !candidate.isCuratedGpu;
     const avgFpsGainPct = candidate.confidence === 'speculative' ? undefined : candidate.avgGain;
     const bullets: string[] = [];
-    if (candidate.confidence !== 'confirmed' || isUnvalidated) {
-      bullets.push('Estimated performance based on nearby GPUs.');
-    }
     if (baseline.boundType === 'GPU_BOUND') {
       bullets.push('Largest FPS gains for your selection.');
     }
@@ -1030,9 +1027,6 @@ export function analyzeSystem(input: AnalysisInput): AnalysisResult {
           ? 'GPU is the main limiter for your selected games.'
           : 'GPU gains are strong while CPU headroom remains.'
       );
-      if (top.confidence && top.confidence !== 'confirmed') {
-        reasons.push('Estimated performance based on nearby GPUs.');
-      }
       if (top.qualitativeBullets[0]) reasons.push(top.qualitativeBullets[0]);
     } else if (bestGroup.category === 'CPU') {
       impactSummary =
