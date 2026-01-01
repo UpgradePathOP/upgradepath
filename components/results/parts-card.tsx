@@ -40,10 +40,31 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
               {group.items.map(item => {
                 const links = getAffiliateLinks(item);
                 const hasSearch = links.some(link => link.kind === 'search');
+                const labelText = (item.label ?? '').toLowerCase();
+                const isBest = labelText.includes('best value');
+                const isFast = labelText.includes('fastest');
+                const isBalanced = labelText.includes('balanced');
+                const labelTone = isBest
+                  ? 'text-brand-600 dark:text-brand-300'
+                  : isFast
+                  ? 'text-sky-600 dark:text-sky-300'
+                  : isBalanced
+                  ? 'text-slate-500 dark:text-slate-400'
+                  : 'text-slate-500 dark:text-muted';
+                const gainTone = isBest
+                  ? 'text-brand-600 dark:text-brand-400'
+                  : isFast
+                  ? 'text-sky-600 dark:text-sky-300'
+                  : isBalanced
+                  ? 'text-slate-500 dark:text-slate-400'
+                  : 'text-brand-600 dark:text-brand-400';
+                const cardTone = isBest
+                  ? 'border border-brand-500/40 dark:border-brand-500/30 bg-brand-50/50 dark:bg-brand-500/5 ring-1 ring-brand-500/10'
+                  : 'border border-slate-200/60 dark:border-border bg-slate-50 dark:bg-surface/70';
                 return (
-                  <div key={item.id} className="bg-slate-50 dark:bg-surface/70 rounded-lg p-3">
+                  <div key={item.id} className={`rounded-lg p-3 ${cardTone}`}>
                   {item.label && (
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-muted mb-1">
+                    <p className={`text-[11px] uppercase tracking-[0.2em] mb-1 ${labelTone}`}>
                       {item.label}
                     </p>
                   )}
@@ -55,7 +76,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                   </div>
                   <div className="mt-1 space-y-1">
                     {item.partType === 'GPU' && typeof item.avgFpsGainPct === 'number' && item.avgFpsGainPct > 0 && (
-                      <div className="text-xs text-brand-600 dark:text-brand-400 font-semibold">
+                      <div className={`text-xs font-semibold ${gainTone}`}>
                         {item.avgFpsGainLabel ?? 'Avg FPS'}: +{item.avgFpsGainPct}%
                       </div>
                     )}
