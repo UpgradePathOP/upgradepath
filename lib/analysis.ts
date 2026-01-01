@@ -694,12 +694,21 @@ function suggestParts(
     picks.push({ label, candidate: pick });
   };
 
+  const addOrMergePick = (label: string, candidate: (typeof candidates)[number] | undefined) => {
+    if (!candidate) return;
+    const existing = picks.find(p => p.candidate.gpu.id === candidate.gpu.id);
+    if (existing) {
+      existing.label = `${existing.label} · ${label}`;
+      return;
+    }
+    used.add(candidate.gpu.id);
+    picks.push({ label, candidate });
+  };
+
+  const bestValueCandidate = byValue[0];
   const bestPerf = byPerf[0];
-  if (bestPerf) {
-    used.add(bestPerf.gpu.id);
-    picks.push({ label: 'Fastest within budget', candidate: bestPerf });
-  }
-  addPick('Best value per dollar', byValue);
+  addOrMergePick('Best value per dollar', bestValueCandidate);
+  addOrMergePick('Fastest within budget', bestPerf);
   addPick('Balanced', byBalanced);
 
   const labelOrder = ['Best value per dollar', 'Fastest within budget', 'Balanced'];
