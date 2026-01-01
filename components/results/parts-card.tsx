@@ -86,7 +86,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                           href={link.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs font-semibold text-brand-700 dark:text-brand-300 hover:text-brand-800 dark:hover:text-brand-200 transition"
+                          className="inline-flex items-center rounded-full border border-slate-300/60 dark:border-border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-200 hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition"
                         >
                           {link.label}
                         </a>
@@ -94,7 +94,7 @@ export function PartsCard({ recommendations }: { recommendations: AnalysisResult
                     </div>
                   </div>
                 </div>
-                );
+              );
               })}
             </div>
           </div>
